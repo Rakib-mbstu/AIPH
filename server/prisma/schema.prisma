@@ -1,0 +1,204 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Core user identity
+model User {
+  id              String   @id @default(cuid())
+  clerkId         String   @unique
+  email           String   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  profile         UserProfile?
+  attempts        Attempt[]
+  patterns        PatternMastery[]
+  topics          TopicProgress[]
+  weakAreas       WeakArea[]
+  chatMessages    ChatMessage[]
+}
+
+// User preferences and settings
+model UserProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  experienceLevel String?  // beginner | intermediate | advanced
+  targetRole      String?  // frontend | backend | fullstack
+  timelineDays    Int?     // days until interview
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Topic metadata
+model Topic {
+  id          String   @id @default(cuid())
+  name        String   @unique // Arrays, Trees, Graphs, etc.
+  description String?
+  createdAt   DateTime @default(now())
+
+  progresses  TopicProgress[]
+  problems    Problem[]
+  weakAreas   WeakArea[]
+}
+
+// Topic-level progress per user
+model TopicProgress {
+  id              String   @id @default(cuid())
+  userId          String
+  topicId         String
+  masteryScore    Int      @default(0)  // 0-100
+  attemptCount    Int      @default(0)
+  successCount    Int      @default(0)
+  averageSolveTime Int?    // minutes
+  lastReviewed    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@index([userId])
+  @@index([topicId])
+}
+
+// DSA Pattern metadata
+model Pattern {
+  id          String   @id @default(cuid())
+  name        String   @unique // Sliding Window, Two Pointers, etc.
+  description String?
+  createdAt   DateTime @default(now())
+
+  masteries  PatternMastery[]
+  problems   Problem[]
+  weakAreas  WeakArea[]
+}
+
+// Pattern-level mastery per user
+model PatternMastery {
+  id              String   @id @default(cuid())
+  userId          String
+  patternId       String
+  masteryScore    Int      @default(0)  // 0-100
+  confidenceScore Int      @default(0)  // 0-100
+  attemptCount    Int      @default(0)
+  solvedCount     Int      @default(0)
+  averageSolveTime Int?    // minutes
+  lastReviewed    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pattern Pattern @relation(fields: [patternId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, patternId])
+  @@index([userId])
+  @@index([patternId])
+}
+
+// Coding problem definition
+model Problem {
+  id          String   @id @default(cuid())
+  title       String
+  difficulty  String   // easy | medium | hard
+  topicId     String
+  patternId   String
+  source      String?  // leetcode url
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  topic    Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  pattern  Pattern  @relation(fields: [patternId], references: [id], onDelete: Cascade)
+  attempts Attempt[]
+
+  @@index([topicId])
+  @@index([patternId])
+}
+
+// User's attempt at a problem
+model Attempt {
+  id              String   @id @default(cuid())
+  userId          String
+  problemId       String
+  status          String   // solved | attempted | failed
+  solveTime       Int      // minutes
+  hintsUsed       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  submission AttemptSubmission?
+
+  @@index([userId])
+  @@index([problemId])
+  @@index([createdAt])
+}
+
+// Approach evaluation and AI feedback
+model AttemptSubmission {
+  id                 String   @id @default(cuid())
+  attemptId          String   @unique
+  approachText       String   @db.Text
+  aiScore            Int?     // 0-100
+  timeComplexity     String?  // O(n)
+  spaceComplexity    String?  // O(n)
+  feedback           String?  @db.Text
+  patternIdentified  String?
+  suggestedOptimization String?
+  evaluatedAt        DateTime @default(now())
+  createdAt          DateTime @default(now())
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+}
+
+// Detected weak areas
+model WeakArea {
+  id          String   @id @default(cuid())
+  userId      String
+  topicId     String?
+  patternId   String?
+  reason      String   // slow | confused | failing
+  severity    Int      @default(1)  // 1-3
+  detectedAt  DateTime @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic   Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  pattern Pattern? @relation(fields: [patternId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([topicId])
+  @@index([patternId])
+  @@index([detectedAt])
+}
+
+// Chat conversation history
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  role      String   // user | assistant
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
