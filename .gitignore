@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment — never commit
+.env
+.env.*
+!.env.example
+
+# Stray secrets / scratch files
+/some
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Coverage / test artifacts
+coverage/
+.nyc_output/
+
+# Prisma local SQLite (we use Postgres, but just in case)
+**/dev.db
+**/dev.db-journal
+
+# Vite cache
+.vite/
+client/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
