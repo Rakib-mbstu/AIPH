@@ -1,0 +1,444 @@
+[
+  {
+    "title": "Two Sum",
+    "difficulty": "easy",
+    "topic": "Arrays",
+    "pattern": "Hash Map",
+    "source": "https://leetcode.com/problems/two-sum/",
+    "description": "Return indices of two numbers that add up to a target."
+  },
+  {
+    "title": "Best Time to Buy and Sell Stock",
+    "difficulty": "easy",
+    "topic": "Arrays",
+    "pattern": "Sliding Window",
+    "source": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock/",
+    "description": "Find the maximum profit from a single buy/sell."
+  },
+  {
+    "title": "Contains Duplicate",
+    "difficulty": "easy",
+    "topic": "Arrays",
+    "pattern": "Hash Map",
+    "source": "https://leetcode.com/problems/contains-duplicate/",
+    "description": "Check if any value appears at least twice in the array."
+  },
+  {
+    "title": "Product of Array Except Self",
+    "difficulty": "medium",
+    "topic": "Arrays",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/product-of-array-except-self/",
+    "description": "Return an array where each index is the product of all other elements."
+  },
+  {
+    "title": "Maximum Subarray",
+    "difficulty": "medium",
+    "topic": "Arrays",
+    "pattern": "Dynamic Programming",
+    "source": "https://leetcode.com/problems/maximum-subarray/",
+    "description": "Kadane's algorithm — find the contiguous subarray with the largest sum."
+  },
+  {
+    "title": "Container With Most Water",
+    "difficulty": "medium",
+    "topic": "Arrays",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/container-with-most-water/",
+    "description": "Find two lines that together with the x-axis form a container holding the most water."
+  },
+  {
+    "title": "3Sum",
+    "difficulty": "medium",
+    "topic": "Arrays",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/3sum/",
+    "description": "Find all unique triplets that sum to zero."
+  },
+  {
+    "title": "Trapping Rain Water",
+    "difficulty": "hard",
+    "topic": "Arrays",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/trapping-rain-water/",
+    "description": "Compute total rainwater trapped between elevation bars."
+  },
+
+  {
+    "title": "Valid Anagram",
+    "difficulty": "easy",
+    "topic": "Strings",
+    "pattern": "Hash Map",
+    "source": "https://leetcode.com/problems/valid-anagram/",
+    "description": "Determine if two strings are anagrams of each other."
+  },
+  {
+    "title": "Valid Palindrome",
+    "difficulty": "easy",
+    "topic": "Strings",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/valid-palindrome/",
+    "description": "Check if a string is a palindrome considering only alphanumerics."
+  },
+  {
+    "title": "Longest Substring Without Repeating Characters",
+    "difficulty": "medium",
+    "topic": "Strings",
+    "pattern": "Sliding Window",
+    "source": "https://leetcode.com/problems/longest-substring-without-repeating-characters/",
+    "description": "Find the length of the longest substring without duplicate characters."
+  },
+  {
+    "title": "Longest Repeating Character Replacement",
+    "difficulty": "medium",
+    "topic": "Strings",
+    "pattern": "Sliding Window",
+    "source": "https://leetcode.com/problems/longest-repeating-character-replacement/",
+    "description": "Find the longest substring achievable with at most k character replacements."
+  },
+  {
+    "title": "Minimum Window Substring",
+    "difficulty": "hard",
+    "topic": "Strings",
+    "pattern": "Sliding Window",
+    "source": "https://leetcode.com/problems/minimum-window-substring/",
+    "description": "Find the smallest window in s that contains all characters of t."
+  },
+  {
+    "title": "Group Anagrams",
+    "difficulty": "medium",
+    "topic": "Strings",
+    "pattern": "Hash Map",
+    "source": "https://leetcode.com/problems/group-anagrams/",
+    "description": "Group strings that are anagrams of each other."
+  },
+
+  {
+    "title": "Top K Frequent Elements",
+    "difficulty": "medium",
+    "topic": "Hash Maps",
+    "pattern": "Hash Map",
+    "source": "https://leetcode.com/problems/top-k-frequent-elements/",
+    "description": "Return the k most frequent elements in an array."
+  },
+  {
+    "title": "Subarray Sum Equals K",
+    "difficulty": "medium",
+    "topic": "Hash Maps",
+    "pattern": "Hash Map",
+    "source": "https://leetcode.com/problems/subarray-sum-equals-k/",
+    "description": "Count contiguous subarrays whose sum equals k using prefix sums."
+  },
+  {
+    "title": "Longest Consecutive Sequence",
+    "difficulty": "medium",
+    "topic": "Hash Maps",
+    "pattern": "Hash Map",
+    "source": "https://leetcode.com/problems/longest-consecutive-sequence/",
+    "description": "Find the length of the longest consecutive elements sequence in O(n)."
+  },
+
+  {
+    "title": "Reverse Linked List",
+    "difficulty": "easy",
+    "topic": "Linked Lists",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/reverse-linked-list/",
+    "description": "Reverse a singly linked list iteratively."
+  },
+  {
+    "title": "Linked List Cycle",
+    "difficulty": "easy",
+    "topic": "Linked Lists",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/linked-list-cycle/",
+    "description": "Detect if a linked list has a cycle (Floyd's tortoise and hare)."
+  },
+  {
+    "title": "Merge Two Sorted Lists",
+    "difficulty": "easy",
+    "topic": "Linked Lists",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/merge-two-sorted-lists/",
+    "description": "Merge two sorted linked lists into one sorted list."
+  },
+  {
+    "title": "Reorder List",
+    "difficulty": "medium",
+    "topic": "Linked Lists",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/reorder-list/",
+    "description": "Reorder L0 → L_n → L1 → L_{n-1} → L2 → ..."
+  },
+
+  {
+    "title": "Valid Parentheses",
+    "difficulty": "easy",
+    "topic": "Stacks & Queues",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/valid-parentheses/",
+    "description": "Check if a string of brackets is balanced using a stack."
+  },
+  {
+    "title": "Min Stack",
+    "difficulty": "medium",
+    "topic": "Stacks & Queues",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/min-stack/",
+    "description": "Design a stack supporting push, pop, top, and getMin in O(1)."
+  },
+  {
+    "title": "Daily Temperatures",
+    "difficulty": "medium",
+    "topic": "Stacks & Queues",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/daily-temperatures/",
+    "description": "For each day, find how many days until a warmer temperature (monotonic stack)."
+  },
+  {
+    "title": "Largest Rectangle in Histogram",
+    "difficulty": "hard",
+    "topic": "Stacks & Queues",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/largest-rectangle-in-histogram/",
+    "description": "Find the largest rectangle that fits inside a histogram."
+  },
+
+  {
+    "title": "Maximum Depth of Binary Tree",
+    "difficulty": "easy",
+    "topic": "Trees",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/maximum-depth-of-binary-tree/",
+    "description": "Return the depth of a binary tree."
+  },
+  {
+    "title": "Invert Binary Tree",
+    "difficulty": "easy",
+    "topic": "Trees",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/invert-binary-tree/",
+    "description": "Mirror a binary tree by swapping left and right children at every node."
+  },
+  {
+    "title": "Same Tree",
+    "difficulty": "easy",
+    "topic": "Trees",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/same-tree/",
+    "description": "Determine if two binary trees are structurally identical."
+  },
+  {
+    "title": "Binary Tree Level Order Traversal",
+    "difficulty": "medium",
+    "topic": "Trees",
+    "pattern": "BFS",
+    "source": "https://leetcode.com/problems/binary-tree-level-order-traversal/",
+    "description": "Return the values of a binary tree level by level."
+  },
+  {
+    "title": "Validate Binary Search Tree",
+    "difficulty": "medium",
+    "topic": "Trees",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/validate-binary-search-tree/",
+    "description": "Check if a binary tree satisfies the BST invariant."
+  },
+  {
+    "title": "Lowest Common Ancestor of a BST",
+    "difficulty": "medium",
+    "topic": "Trees",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-search-tree/",
+    "description": "Find the LCA of two nodes in a BST."
+  },
+  {
+    "title": "Binary Tree Maximum Path Sum",
+    "difficulty": "hard",
+    "topic": "Trees",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/binary-tree-maximum-path-sum/",
+    "description": "Find the maximum path sum in a binary tree (path can start and end anywhere)."
+  },
+
+  {
+    "title": "Number of Islands",
+    "difficulty": "medium",
+    "topic": "Graphs",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/number-of-islands/",
+    "description": "Count the number of connected land regions in a 2D grid."
+  },
+  {
+    "title": "Clone Graph",
+    "difficulty": "medium",
+    "topic": "Graphs",
+    "pattern": "BFS",
+    "source": "https://leetcode.com/problems/clone-graph/",
+    "description": "Deep copy an undirected graph."
+  },
+  {
+    "title": "Course Schedule",
+    "difficulty": "medium",
+    "topic": "Graphs",
+    "pattern": "DFS",
+    "source": "https://leetcode.com/problems/course-schedule/",
+    "description": "Detect cycles in a directed graph (topological sort)."
+  },
+  {
+    "title": "Pacific Atlantic Water Flow",
+    "difficulty": "medium",
+    "topic": "Graphs",
+    "pattern": "BFS",
+    "source": "https://leetcode.com/problems/pacific-atlantic-water-flow/",
+    "description": "Find cells that can flow to both the Pacific and Atlantic oceans."
+  },
+  {
+    "title": "Word Ladder",
+    "difficulty": "hard",
+    "topic": "Graphs",
+    "pattern": "BFS",
+    "source": "https://leetcode.com/problems/word-ladder/",
+    "description": "Find the shortest transformation sequence from beginWord to endWord."
+  },
+
+  {
+    "title": "Climbing Stairs",
+    "difficulty": "easy",
+    "topic": "Dynamic Programming",
+    "pattern": "Dynamic Programming",
+    "source": "https://leetcode.com/problems/climbing-stairs/",
+    "description": "Count the number of distinct ways to climb n stairs (Fibonacci)."
+  },
+  {
+    "title": "House Robber",
+    "difficulty": "medium",
+    "topic": "Dynamic Programming",
+    "pattern": "Dynamic Programming",
+    "source": "https://leetcode.com/problems/house-robber/",
+    "description": "Maximize money robbed from non-adjacent houses."
+  },
+  {
+    "title": "Coin Change",
+    "difficulty": "medium",
+    "topic": "Dynamic Programming",
+    "pattern": "Dynamic Programming",
+    "source": "https://leetcode.com/problems/coin-change/",
+    "description": "Find the fewest coins needed to make up an amount."
+  },
+  {
+    "title": "Longest Increasing Subsequence",
+    "difficulty": "medium",
+    "topic": "Dynamic Programming",
+    "pattern": "Dynamic Programming",
+    "source": "https://leetcode.com/problems/longest-increasing-subsequence/",
+    "description": "Find the length of the longest strictly increasing subsequence."
+  },
+  {
+    "title": "Word Break",
+    "difficulty": "medium",
+    "topic": "Dynamic Programming",
+    "pattern": "Dynamic Programming",
+    "source": "https://leetcode.com/problems/word-break/",
+    "description": "Determine if a string can be segmented into dictionary words."
+  },
+  {
+    "title": "Edit Distance",
+    "difficulty": "hard",
+    "topic": "Dynamic Programming",
+    "pattern": "Dynamic Programming",
+    "source": "https://leetcode.com/problems/edit-distance/",
+    "description": "Find the minimum number of operations to convert one string into another."
+  },
+
+  {
+    "title": "Jump Game",
+    "difficulty": "medium",
+    "topic": "Greedy",
+    "pattern": "Dynamic Programming",
+    "source": "https://leetcode.com/problems/jump-game/",
+    "description": "Determine if you can reach the last index of an array."
+  },
+  {
+    "title": "Gas Station",
+    "difficulty": "medium",
+    "topic": "Greedy",
+    "pattern": "Two Pointers",
+    "source": "https://leetcode.com/problems/gas-station/",
+    "description": "Find the starting gas station from which you can complete the circuit."
+  },
+
+  {
+    "title": "Subsets",
+    "difficulty": "medium",
+    "topic": "Backtracking",
+    "pattern": "Backtracking",
+    "source": "https://leetcode.com/problems/subsets/",
+    "description": "Generate all possible subsets of a set."
+  },
+  {
+    "title": "Permutations",
+    "difficulty": "medium",
+    "topic": "Backtracking",
+    "pattern": "Backtracking",
+    "source": "https://leetcode.com/problems/permutations/",
+    "description": "Return all possible permutations of distinct integers."
+  },
+  {
+    "title": "Combination Sum",
+    "difficulty": "medium",
+    "topic": "Backtracking",
+    "pattern": "Backtracking",
+    "source": "https://leetcode.com/problems/combination-sum/",
+    "description": "Find all unique combinations of candidates that sum to target."
+  },
+  {
+    "title": "Word Search",
+    "difficulty": "medium",
+    "topic": "Backtracking",
+    "pattern": "Backtracking",
+    "source": "https://leetcode.com/problems/word-search/",
+    "description": "Find if a word exists in a 2D board of letters."
+  },
+  {
+    "title": "N-Queens",
+    "difficulty": "hard",
+    "topic": "Backtracking",
+    "pattern": "Backtracking",
+    "source": "https://leetcode.com/problems/n-queens/",
+    "description": "Place n queens on an n×n board so that no two attack each other."
+  },
+
+  {
+    "title": "Binary Search",
+    "difficulty": "easy",
+    "topic": "Arrays",
+    "pattern": "Binary Search",
+    "source": "https://leetcode.com/problems/binary-search/",
+    "description": "Classic binary search on a sorted array."
+  },
+  {
+    "title": "Search in Rotated Sorted Array",
+    "difficulty": "medium",
+    "topic": "Arrays",
+    "pattern": "Binary Search",
+    "source": "https://leetcode.com/problems/search-in-rotated-sorted-array/",
+    "description": "Search for a target in a rotated sorted array in O(log n)."
+  },
+  {
+    "title": "Find Minimum in Rotated Sorted Array",
+    "difficulty": "medium",
+    "topic": "Arrays",
+    "pattern": "Binary Search",
+    "source": "https://leetcode.com/problems/find-minimum-in-rotated-sorted-array/",
+    "description": "Find the smallest element in a rotated sorted array."
+  },
+  {
+    "title": "Median of Two Sorted Arrays",
+    "difficulty": "hard",
+    "topic": "Arrays",
+    "pattern": "Binary Search",
+    "source": "https://leetcode.com/problems/median-of-two-sorted-arrays/",
+    "description": "Find the median of two sorted arrays in O(log(min(m,n)))."
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Arrays",
+    "description": "Linear sequences. Foundation for almost every other DSA topic — sorting, two-pointer scans, prefix sums."
+  },
+  {
+    "name": "Strings",
+    "description": "Character sequences. Heavy overlap with Arrays plus parsing, palindromes, and pattern matching."
+  },
+  {
+    "name": "Hash Maps",
+    "description": "Constant-time lookup. The single most useful data structure for interview problems."
+  },
+  {
+    "name": "Linked Lists",
+    "description": "Pointer manipulation, cycle detection, in-place reversal."
+  },
+  {
+    "name": "Stacks & Queues",
+    "description": "LIFO/FIFO structures. Powers monotonic stack problems and BFS traversals."
+  },
+  {
+    "name": "Trees",
+    "description": "Binary trees, BSTs, traversals (DFS/BFS), recursion patterns."
+  },
+  {
+    "name": "Graphs",
+    "description": "Nodes and edges. BFS, DFS, shortest path, topological sort, union-find."
+  },
+  {
+    "name": "Dynamic Programming",
+    "description": "Overlapping subproblems and memoization. The category that separates mid from senior."
+  },
+  {
+    "name": "Greedy",
+    "description": "Locally-optimal choices that lead to globally-optimal solutions. Often deceptively simple."
+  },
+  {
+    "name": "Backtracking",
+    "description": "Try, recurse, undo. Permutations, combinations, constraint satisfaction."
+  }
+]

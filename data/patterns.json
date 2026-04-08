@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Two Pointers",
+    "description": "Two indices traversing a sequence. Use for sorted-array problems, palindrome checks, and pair-sum variants."
+  },
+  {
+    "name": "Sliding Window",
+    "description": "Maintain a window of elements over a sequence. Use for subarray/substring problems with a size or constraint."
+  },
+  {
+    "name": "Binary Search",
+    "description": "Halve the search space each step. Works on sorted arrays and on answer spaces (binary search the answer)."
+  },
+  {
+    "name": "DFS",
+    "description": "Depth-first traversal via recursion or an explicit stack. Use for tree/graph exploration and path-building."
+  },
+  {
+    "name": "BFS",
+    "description": "Breadth-first traversal via a queue. Use for shortest path on unweighted graphs and level-order tree traversal."
+  },
+  {
+    "name": "Backtracking",
+    "description": "Recursive search with state restoration on each return. Use for permutations, combinations, and N-queens-style problems."
+  },
+  {
+    "name": "Dynamic Programming",
+    "description": "Cache subproblem results. Use for optimal substructure: knapsack, LIS, edit distance, grid paths."
+  },
+  {
+    "name": "Hash Map",
+    "description": "O(1) lookups for membership and counting. Use for two-sum variants, anagrams, and frequency tracking."
+  }
+]
