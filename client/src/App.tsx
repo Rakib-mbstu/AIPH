@@ -1,11 +1,20 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react'
 import { useInitializeUser } from './store/userStore'
+import Layout from './components/Layout'
 
 import RoadmapPage from './pages/RoadmapPage'
 import TrackerPage from './pages/TrackerPage'
+import ProblemsPage from './pages/ProblemsPage'
 // import ChatPage from './pages/ChatPage'
-// import ProblemsPage from './pages/ProblemsPage'
+
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <SignedIn>
+      <Layout>{children}</Layout>
+    </SignedIn>
+  )
+}
 
 function App() {
   useInitializeUser()
@@ -20,35 +29,33 @@ function App() {
         <Route
           path="/roadmap"
           element={
-            <SignedIn>
+            <ProtectedLayout>
               <RoadmapPage />
-            </SignedIn>
+            </ProtectedLayout>
           }
         />
         <Route
           path="/tracker"
           element={
-            <SignedIn>
+            <ProtectedLayout>
               <TrackerPage />
-            </SignedIn>
+            </ProtectedLayout>
           }
         />
         <Route
           path="/chat"
           element={
-            <SignedIn>
-              <div>Chat Page (WIP)</div>
-              {/* <ChatPage /> */}
-            </SignedIn>
+            <ProtectedLayout>
+              <div className="p-8 text-gray-500">Chat — coming soon</div>
+            </ProtectedLayout>
           }
         />
         <Route
           path="/problems"
           element={
-            <SignedIn>
-              <div>Problems Page (WIP)</div>
-              {/* <ProblemsPage /> */}
-            </SignedIn>
+            <ProtectedLayout>
+              <ProblemsPage />
+            </ProtectedLayout>
           }
         />
 

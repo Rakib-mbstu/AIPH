@@ -131,6 +131,43 @@ export interface ProgressResponse {
   readiness: ReadinessResult;
 }
 
+export interface RecommendedProblem {
+  problemId: string;
+  title: string;
+  difficulty: string;  // 'easy' | 'medium' | 'hard'
+  topic: string;
+  pattern: string;
+  reason: string;
+  priority: number;
+  estimatedMinutes: number;
+}
+
+export interface AttemptPayload {
+  problemId: string;
+  status: 'solved' | 'attempted' | 'failed';
+  solveTime: number;       // minutes
+  hintsUsed?: number;
+  approachText: string;    // min 10 chars
+}
+
+export interface AttemptResult {
+  attempt: {
+    id: string;
+    status: string;
+    solveTime: number;
+    hintsUsed: number;
+    createdAt: string;
+  };
+  submission: {
+    aiScore: number;
+    timeComplexity: string | null;
+    spaceComplexity: string | null;
+    feedback: string | null;
+    patternIdentified: string | null;
+    suggestedOptimization: string | null;
+  };
+}
+
 export type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
 /**
@@ -247,16 +284,21 @@ export const api = {
     apiCall('/roadmap/generate', { method: 'POST', token }),
 
   // Problems
-  getProblems: () => apiCall('/problems'),
+  getProblems: (token: string, limit = 10) =>
+    apiCall<{ recommendations: RecommendedProblem[] }>(
+      `/problems?limit=${limit}`,
+      { token }
+    ),
 
   // Attempts
-  submitAttempt: (attemptData: any) =>
-    apiCall('/attempts', {
+  submitAttempt: (token: string, attemptData: AttemptPayload) =>
+    apiCall<AttemptResult>('/attempts', {
       method: 'POST',
       body: JSON.stringify(attemptData),
+      token,
     }),
-  getAttemptHistory: (problemId: string) =>
-    apiCall(`/attempts/${problemId}`),
+  getAttemptHistory: (token: string, problemId: string) =>
+    apiCall<{ attempts: any[] }>(`/attempts/${problemId}`, { token }),
 
   // Progress
   getProgress: (token: string) =>
