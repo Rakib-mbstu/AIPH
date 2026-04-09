@@ -24,9 +24,9 @@
 | **Cycle C**. Pattern tracking surface | ✅ Complete |
 | **Cycle E**. Readiness score | ✅ Complete |
 | **Cycle F**. PostHog + polish | ✅ Complete |
-| **Cycle G**. App shell + navigation | ⬜ Next |
-| **Cycle H**. Problems page + attempt submission UI | ⬜ |
-| **Cycle I**. Chat page | ⬜ |
+| **Cycle G**. App shell + navigation | ✅ Complete |
+| **Cycle H**. Problems page + attempt submission UI | ✅ Complete |
+| **Cycle I**. Chat page | ⬜ Next |
 | **Cycle J**. End-to-end auth smoke test (real Clerk keys) | ⬜ |
 
 ---
@@ -224,7 +224,7 @@ PORT=4000
 | 1 | Project scaffold, Clerk auth, Express + Prisma setup, AI chat (streaming), static roadmap, AI approach evaluation, passive weakness detection | ✅ Complete |
 | 2 | Adaptive roadmap (topic graph + status computation), LLM recommendation engine | ✅ Complete (Cycles B + D) |
 | 3 | Pattern tracking surface, readiness score, PostHog analytics | ✅ Complete (Cycles C + E + F) |
-| 3.5 | App shell, Problems page + attempt UI, Chat page, auth smoke test | Next (Cycles G + H + I + J) |
+| 3.5 | App shell, Problems page + attempt UI, Chat page, auth smoke test | In progress — G + H ✅, I + J ⬜ |
 | 4 | Mock interview mode | Out of scope (for now) |
 
 ---
@@ -755,6 +755,39 @@ Phases 1–3 built the full backend and two of four UI surfaces. The next cycles
 - AI evaluation result renders inline on the card after submission (score bar, feedback text, pattern badge)
 - `useTimer` hook already exists — wire it to auto-fill `solveTime` when the user opens a problem card
 - The `api.ts` methods `getProblems` and `submitAttempt` currently don't pass auth tokens — fix this
+
+### Cycle G — App Shell + Navigation
+
+Implemented shared layout with persistent sidebar navigation, wiring all four routes into a common shell.
+
+**Files:**
+- `client/src/components/Layout.tsx` — **new.** Desktop sidebar (`w-56`, sticky): app title linked to `/roadmap`, 4 `NavLink` items, `<UserButton />` at bottom. Mobile: fixed bottom tab bar (icons only, `flex md:hidden`). Active link: `bg-indigo-50 text-indigo-700 font-semibold`. `nav_clicked` analytics event on every link
+- `client/src/App.tsx` — **updated.** `ProtectedLayout` wrapper (`<SignedIn>` + `<Layout>`); all 4 routes use it
+
+**Key design calls:**
+- Pages keep their own `max-w-6xl mx-auto p-6` — no coupling to shell
+- `useInitializeUser()` stays in `App`, not `Layout`
+- No new dependencies (no icon library)
+- Mobile tab bar uses the same `NAV_ITEMS` array, only shows emoji icons
+
+### Cycle H — Problems Page + Attempt Submission UI
+
+Built the full Problems page — browse recommendations and submit attempts with AI evaluation inline.
+
+**Files:**
+- `client/src/lib/api.ts` — **updated.** Fixed `getProblems`, `submitAttempt`, `getAttemptHistory` (all were missing auth tokens). Added `RecommendedProblem`, `AttemptPayload`, `AttemptResult` types
+- `client/src/pages/ProblemsPage.tsx` — **new.** Single file with 4 internal components:
+  - `ProblemsPage` (default export): fetches `GET /api/problems?limit=10`, refresh button, empty state
+  - `ProblemCard`: collapsed/expanded toggle; difficulty badges (emerald/amber/red); topic + pattern pills; reason + estimated time
+  - `AttemptForm`: inline timer (MM:SS, auto-starts on card expand, Stop Timer pre-fills solve time); status selector (Solved/Attempted/Failed toggle buttons); solve time number input; hints +/- counter; approach textarea with char count (`{n}/10 min`); submit disabled until status + ≥10 chars
+  - `EvaluationResult`: score with color coding (≥80 emerald, ≥50 indigo, <50 amber); pattern badge; time/space complexity; feedback; suggestion block
+- `client/src/App.tsx` — **updated.** ProblemsPage imported and wired into `/problems` route
+
+**Key design calls:**
+- `useTimer` hook didn't exist — timer implemented inline in `AttemptForm` with `useState`/`useEffect`
+- Status state typed as `'solved' | 'attempted' | 'failed' | null` (not `''`) to satisfy TypeScript strictness
+- All sub-components non-exported, defined in same file — no extra component files
+- `problems_viewed` on mount, `attempt_submitted` on successful submit
 
 ### Cycle I — Chat Page
 
