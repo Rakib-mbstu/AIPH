@@ -225,7 +225,10 @@ PORT=4000
 | 2 | Adaptive roadmap (topic graph + status computation), LLM recommendation engine | ✅ Complete (Cycles B + D) |
 | 3 | Pattern tracking surface, readiness score, PostHog analytics | ✅ Complete (Cycles C + E + F) |
 | 3.5 | App shell, Problems page + attempt UI, Chat page, auth smoke test | ✅ Complete (Cycles G + H + I + J) |
-| 4 | Mock interview mode | Out of scope (for now) |
+| 4 | UX polish, cross-page linking, LeetCode source links | Next (Cycles K + L + M) |
+| 5 | Testing infrastructure (unit, integration, prompt regression) | Planned (Cycles N + O) |
+| 6 | Deployment (Docker, CI/CD, production config) | Planned |
+| 7 | Mock interview mode, voice, exportable reports | Out of scope (for now) |
 
 ---
 
@@ -847,3 +850,176 @@ Verified app correctness programmatically without requiring real Clerk credentia
 - None — all checks passed on first run
 
 **Note:** Full Clerk + database smoke test (sign-up → attempt → chat → sign-out) deferred to when real keys are available. The auth-bypass flow covers all routes and business logic paths that don't require a live Clerk JWT.
+
+---
+
+## Phase 4 — UX Polish & Cross-Page Linking (Cycles K–M)
+
+The app is feature-complete but the pages are islands. Users can't navigate from
+a weak area on the Tracker to the problems that would fix it, or from a roadmap
+topic node to its problems. This phase weaves the pages together and polishes the
+UX to a level that feels like a product, not a prototype.
+
+### Cycle K — Cross-Page Linking & Problem Source Links
+
+**Goal:** Wire the pages into a connected experience. Every data point that
+references another surface should be clickable.
+
+**Scope:**
+
+1. **Tracker → Problems:** Each `todaysPlan` item becomes a link that navigates
+   to `/problems` and auto-expands that problem card. Approach: pass `problemId`
+   as a query param (`/problems?expand=<id>`), read it in `ProblemsPage` and
+   set `expandedId` on mount.
+
+2. **Roadmap → Problems:** Clicking a topic node navigates to
+   `/problems?topic=<name>`. `ProblemsPage` reads the param and filters (or
+   re-fetches with a topic hint). This may need a small backend change — add
+   an optional `topicId` query param to `GET /api/problems` so the engine can
+   bias toward a specific topic.
+
+3. **Tracker weak areas → Roadmap:** Each weak area badge links to `/roadmap`
+   and highlights the affected topic node (scroll into view or flash animation).
+
+4. **LeetCode source links:** Problem cards show a "Solve on LeetCode" button
+   that opens `problem.source` in a new tab. The `source` field exists on all
+   54 seed problems. Need to:
+   - Return `source` from `GET /api/problems` (add it to the recommendation
+     response — currently not included in `RankedRecommendation`)
+   - Display on ProblemCard (collapsed view, small external-link icon)
+
+5. **Roadmap pattern card → detail:** Clicking a pattern card could navigate
+   to `/problems?pattern=<name>`, filtering by pattern.
+
+**Backend changes:**
+- `server/src/lib/recommendation/engine.ts` — include `source` in
+  `RankedRecommendation` / `toCandidate()`
+- `server/src/routes/problems.ts` — optional `topicId` query param
+
+### Cycle L — Loading States, Empty States & Error Handling Polish
+
+**Goal:** Replace raw text loading/error states with polished skeletons and
+informative empty states.
+
+**Scope:**
+
+1. **Loading skeletons** — All four pages currently show plain text like
+   "Loading roadmap…". Replace with skeleton shimmer blocks that match the
+   shape of the loaded content:
+   - RoadmapPage: gray rectangle where the graph will be + 3 pattern card skeletons
+   - TrackerPage: skeleton cards for each section (plan, activity, weak areas,
+     patterns, readiness)
+   - ProblemsPage: 3–5 card-shaped skeleton blocks
+   - ChatPage: no skeleton needed (empty state is already designed)
+
+2. **Empty states** — TrackerPage when the user has zero attempts should guide
+   them: "Submit your first attempt on the Problems page to see your progress"
+   with a link to `/problems`.
+
+3. **Error retry** — Add a "Retry" button on error states (all pages currently
+   just show `Error: {message}` with no recovery). The button re-triggers the
+   fetch.
+
+4. **Optimistic feedback** — When submitting an attempt on ProblemsPage, show a
+   brief success toast or inline confirmation before the AI evaluation loads
+   (evaluation can take 2–5 seconds).
+
+**No new dependencies.** Skeletons are Tailwind `animate-pulse` rectangles.
+Toasts are inline divs that auto-dismiss.
+
+### Cycle M — Visual Refinement & Accessibility
+
+**Goal:** Polish the visual design and ensure basic accessibility.
+
+**Scope:**
+
+1. **Consistent page headers** — All pages use slightly different header styles.
+   Standardize: `text-2xl font-bold text-gray-900` for title, `text-sm
+   text-gray-500 mt-0.5` for subtitle.
+
+2. **Focus management** — Tab navigation through sidebar links, problem cards,
+   chat input. Ensure `focus:ring-2 focus:ring-indigo-500` on all interactive
+   elements.
+
+3. **Keyboard shortcuts** — Optional but nice: `Cmd+K` / `Ctrl+K` to focus chat
+   input from any page (since chat is always accessible via nav).
+
+4. **Mobile responsiveness audit** — Walk through every page at 375px / 768px
+   width. Known concerns:
+   - React Flow graph may need `minZoom` / touch gestures
+   - Problem cards may need different layout at narrow widths
+   - Chat input should not be obscured by the mobile tab bar
+
+5. **Favicon + page titles** — Set meaningful `<title>` per route (React Helmet
+   or `useEffect` with `document.title`). Add a simple favicon.
+
+6. **Color consistency** — Audit all color usage for consistency:
+   - Indigo-600/700 for primary actions
+   - Emerald for success / mastered
+   - Amber for warning / in-progress
+   - Red for errors / hard difficulty / failed
+
+---
+
+## Phase 5 — Testing Infrastructure (Cycles N–O)
+
+### Cycle N — Unit Tests
+
+**Goal:** Test the pure business logic that powers the system.
+
+**Scope:**
+- Install `vitest` in both workspaces
+- Server unit tests:
+  - `weakness/detect.ts` — test all three thresholds (failing, slow, confused)
+    and the recovery short-circuit (3 solved in a row)
+  - `readiness/score.ts` — test each component formula in isolation, test
+    overall weighted sum, test unscored components
+  - `roadmap/graph.ts` — test `computeNodeStatus` for all 4 states, test
+    `buildPrereqMap`, test graph validation (malformed edge, self-loop, cycle)
+  - `recommendation/todaysPlan.ts` — test pool assembly with various skip sets
+  - `db/queries/mastery.ts` — test EMA formula (`0.7 * old + 0.3 * sample`)
+- Client unit tests:
+  - `Sparkline.tsx` — renders without crashing for 0, 1, and 10 data points
+
+### Cycle O — Integration Tests & Prompt Regression
+
+**Goal:** Test API routes end-to-end and guard against prompt regressions.
+
+**Scope:**
+- Server integration tests (with a test database):
+  - `POST /api/attempts` → creates Attempt + AttemptSubmission + upserts mastery
+  - `GET /api/progress` → returns correct shape after seeding some data
+  - `GET /api/roadmap` → correct node statuses after mastery updates
+  - Chat SSE: verify stream frames parse correctly
+- Prompt regression fixtures:
+  - `tests/prompts/` folder with sample inputs and expected output shapes
+  - `evaluation.md`: given a known approach text, verify the AI returns valid
+    JSON with all required fields (`score`, `timeComplexity`, `patternUsed`, etc.)
+  - Run manually before deploying prompt changes
+- CI script: `npm test` runs both workspaces
+
+---
+
+## Phase 6 — Deployment (Planned)
+
+Not scoped in detail yet. High-level:
+
+- **Docker:** Multi-stage Dockerfiles for client (nginx + static build) and
+  server (Node + Prisma)
+- **docker-compose:** App + Postgres + optional PostHog
+- **CI/CD:** GitHub Actions — lint, type-check, test, build on every push;
+  deploy on merge to main
+- **Environment:** Production `.env` with real keys, `NODE_ENV=production`,
+  Prisma migrations applied via release command
+- **Monitoring:** Error tracking (Sentry or similar), AI fallback rate dashboard
+
+---
+
+## Phase 7 — Mock Interview Mode (Out of Scope)
+
+Reserved for future. Would include:
+- Timed mock sessions (45 min, 2–3 problems, scored)
+- Mock Performance component of readiness score (currently `unscored: true`)
+- System Design questions + evaluation
+- Voice interview (speech-to-text for approach explanation)
+- Exportable reports (PDF summary of readiness + weak areas)
