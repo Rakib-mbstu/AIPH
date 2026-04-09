@@ -6,7 +6,7 @@ import Layout from './components/Layout'
 import RoadmapPage from './pages/RoadmapPage'
 import TrackerPage from './pages/TrackerPage'
 import ProblemsPage from './pages/ProblemsPage'
-// import ChatPage from './pages/ChatPage'
+import ChatPage from './pages/ChatPage'
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -46,7 +46,7 @@ function App() {
           path="/chat"
           element={
             <ProtectedLayout>
-              <div className="p-8 text-gray-500">Chat — coming soon</div>
+              <ChatPage />
             </ProtectedLayout>
           }
         />
