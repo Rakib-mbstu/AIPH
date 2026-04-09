@@ -30,11 +30,26 @@ export interface PatternMastery {
   solvedCount: number;
 }
 
+export type NodeStatus = 'mastered' | 'in-progress' | 'available' | 'locked';
+
+export interface TopicWeakness {
+  reason: string;
+  severity: number;
+}
+
 export interface RoadmapTopic {
   id: string;
   name: string;
   description: string | null;
   progress: TopicProgress | null;
+  status: NodeStatus;
+  weakness: TopicWeakness | null;
+  prereqIds: string[];
+}
+
+export interface RoadmapEdge {
+  from: string; // topic id
+  to: string;   // topic id
 }
 
 export interface RoadmapPattern {
@@ -42,10 +57,12 @@ export interface RoadmapPattern {
   name: string;
   description: string | null;
   mastery: PatternMastery | null;
+  recentScores: number[]; // chronological, 0-100, up to 10
 }
 
 export interface RoadmapResponse {
   topics: RoadmapTopic[];
+  edges: RoadmapEdge[];
   patterns: RoadmapPattern[];
 }
 
@@ -87,11 +104,31 @@ export interface WeakAreaRecord {
   pattern: { id: string; name: string } | null;
 }
 
+export interface ReadinessComponent {
+  score: number;
+  weight: number;
+  unscored?: boolean;
+  detail?: string;
+}
+
+export interface ReadinessResult {
+  overall: number;
+  components: {
+    dsaCoverage: ReadinessComponent;
+    difficultyHandled: ReadinessComponent;
+    consistency: ReadinessComponent;
+    mockPerformance: ReadinessComponent;
+    systemDesign: ReadinessComponent;
+  };
+}
+
 export interface ProgressResponse {
   todaysPlan: PlanItem[];
   recentAttempts: AttemptRecord[];
   weakAreas: WeakAreaRecord[];
   streakDays: number;
+  patterns: RoadmapPattern[];
+  readiness: ReadinessResult;
 }
 
 export type ChatTurn = { role: 'user' | 'assistant'; content: string };
@@ -230,5 +267,6 @@ export const api = {
     apiCall<{ weakAreas: WeakAreaRecord[] }>('/weakness', { token }),
 
   // Readiness
-  getReadiness: () => apiCall('/readiness'),
+  getReadiness: (token: string) =>
+    apiCall<ReadinessResult>('/readiness', { token }),
 };

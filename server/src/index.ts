@@ -39,6 +39,8 @@ import attemptsRoutes from './routes/attempts'
 import progressRoutes from './routes/progress'
 import roadmapRoutes from './routes/roadmap'
 import weaknessRoutes from './routes/weakness'
+import problemsRoutes from './routes/problems'
+import readinessRoutes from './routes/readiness'
 
 app.use('/api/users', usersRoutes)
 app.use('/api/chat', chatRoutes)
@@ -46,6 +48,8 @@ app.use('/api/attempts', attemptsRoutes)
 app.use('/api/progress', progressRoutes)
 app.use('/api/roadmap', roadmapRoutes)
 app.use('/api/weakness', weaknessRoutes)
+app.use('/api/problems', problemsRoutes)
+app.use('/api/readiness', readinessRoutes)
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

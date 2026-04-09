@@ -2,6 +2,7 @@ import React from 'react';
 import { create } from 'zustand';
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { api } from '../lib/api';
+import { identifyUser, resetAnalytics } from '../lib/analytics';
 
 interface UserProfile {
   id: string;
@@ -45,6 +46,7 @@ export function useInitializeUser() {
       setUser(null);
       setOnboarded(false);
       setLoading(false);
+      resetAnalytics();
       return;
     }
 
@@ -65,6 +67,11 @@ export function useInitializeUser() {
             timelineDays: u.profile?.timelineDays,
           });
           setOnboarded(true);
+          identifyUser(u.id, {
+            email: u.email,
+            experienceLevel: u.profile?.experienceLevel,
+            targetRole: u.profile?.targetRole,
+          });
         }
       } catch (err) {
         console.error('[userStore] onboard failed:', err);

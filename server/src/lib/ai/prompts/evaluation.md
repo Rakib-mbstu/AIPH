@@ -40,3 +40,4 @@ Evaluate a user's written approach to a coding problem. Extract the pattern used
 2. **Identify pattern automatically** — don't require user to tag it
 3. **Accept pseudocode** — don't enforce specific syntax
 4. **Flag edge cases** — common mistakes to watch for
+5. **Encourage alternative ways** - encourage and help user find the most optimal solutions

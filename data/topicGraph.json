@@ -1,0 +1,15 @@
+{
+  "edges": [
+    { "from": "Arrays", "to": "Strings" },
+    { "from": "Arrays", "to": "Hash Maps" },
+    { "from": "Arrays", "to": "Linked Lists" },
+    { "from": "Arrays", "to": "Stacks & Queues" },
+    { "from": "Arrays", "to": "Greedy" },
+    { "from": "Hash Maps", "to": "Trees" },
+    { "from": "Linked Lists", "to": "Trees" },
+    { "from": "Stacks & Queues", "to": "Trees" },
+    { "from": "Trees", "to": "Graphs" },
+    { "from": "Trees", "to": "Backtracking" },
+    { "from": "Graphs", "to": "Dynamic Programming" }
+  ]
+}

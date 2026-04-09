@@ -18,6 +18,16 @@
 | 12. Progress tracker page | ✅ Complete |
 | 13. Seed data | ✅ Complete |
 | 14. Local dev wiring | ✅ Complete |
+| **Cycle A**. Phase 1 smoke test (auth-bypass) | ✅ Complete |
+| **Cycle D**. LLM recommendation engine + `/api/problems` | ✅ Complete |
+| **Cycle B**. Adaptive roadmap (topic graph + React Flow) | ✅ Complete |
+| **Cycle C**. Pattern tracking surface | ✅ Complete |
+| **Cycle E**. Readiness score | ✅ Complete |
+| **Cycle F**. PostHog + polish | ✅ Complete |
+| **Cycle G**. App shell + navigation | ⬜ Next |
+| **Cycle H**. Problems page + attempt submission UI | ⬜ |
+| **Cycle I**. Chat page | ⬜ |
+| **Cycle J**. End-to-end auth smoke test (real Clerk keys) | ⬜ |
 
 ---
 
@@ -209,12 +219,13 @@ PORT=4000
 
 ## Development Phases
 
-| Phase | Features |
-|---|---|
-| 1 | Project scaffold, Clerk auth, Express + Prisma setup, AI chat (streaming), static roadmap, AI approach evaluation |
-| 2 | Adaptive roadmap (topic graph), weakness detection engine, pattern tracking |
-| 3 | Readiness score, smart recommendation engine, PostHog analytics |
-| 4 | Mock interview mode |
+| Phase | Features | Status |
+|---|---|---|
+| 1 | Project scaffold, Clerk auth, Express + Prisma setup, AI chat (streaming), static roadmap, AI approach evaluation, passive weakness detection | ✅ Complete |
+| 2 | Adaptive roadmap (topic graph + status computation), LLM recommendation engine | ✅ Complete (Cycles B + D) |
+| 3 | Pattern tracking surface, readiness score, PostHog analytics | ✅ Complete (Cycles C + E + F) |
+| 3.5 | App shell, Problems page + attempt UI, Chat page, auth smoke test | Next (Cycles G + H + I + J) |
+| 4 | Mock interview mode | Out of scope (for now) |
 
 ---
 
@@ -585,3 +596,195 @@ npx prisma db seed
 - Tracker is home base — every feature writes back to it
 - Weakness detection runs passively on every interaction
 - Stream all chat responses via SSE — never wait for full completion
+
+---
+
+## Post-Phase-1 Cycles
+
+### Cycle A — Smoke Test (auth-bypass)
+
+Validated Phase 1 infrastructure end-to-end without Clerk keys:
+- Server `tsc --noEmit` clean
+- Postgres reachable, migrations applied, seed idempotent (10 topics / 8 patterns / 54 problems)
+- Server boots with Clerk-bypass warning
+- `/health` returns 200; protected routes return clean 401 (no crash)
+- Prisma relations resolve against seed data
+
+**Gaps noted:** `client/package.json` missing a `type-check` script (one-line fix, deferred).
+
+### Cycle D — LLM Recommendation Engine
+
+Replaced the deterministic `buildTodaysPlan` rotation with an LLM-driven ranker.
+
+**Files:**
+- `server/src/lib/ai/client.ts` — added `recommendProblems()` + types, routes through existing `recommendation` model entry
+- `server/src/lib/recommendation/engine.ts` — **new.** `recommendForUser(userId, limit)` assembles a capped pool (weak topics → in-progress → backfill, max 25, skip-set = last 20 attempts), calls the LLM, maps results back to full Problem rows. `buildTodaysPlanWithAI()` wraps it for the tracker surface
+- `server/src/routes/problems.ts` — **new.** `GET /api/problems?limit=N` (default 5, max 10)
+- `server/src/routes/progress.ts` — swapped `buildTodaysPlan` → `buildTodaysPlanWithAI`
+- `server/src/index.ts` — registered `/api/problems`
+
+**Key design calls:**
+- Pool is assembled server-side before the prompt so the model ranks an already-prioritized list instead of sifting all 54 problems
+- Hallucination guard: AI recommendations not in the pool are dropped
+- Graceful fallback: LLM failure → empty engine result → `buildTodaysPlan` deterministic fallback. Tracker never breaks on AI downtime
+- Deterministic `todaysPlan.ts` kept as the cold-start safety net
+
+### Cycle B — Adaptive Roadmap (React Flow)
+
+Topic graph + per-user node status, rendered as a React Flow DAG.
+
+**Files:**
+- `data/topicGraph.json` — **new.** 11 prerequisite edges over the 10 seeded topics (Arrays is root, Dynamic Programming is furthest downstream)
+- `server/src/lib/roadmap/graph.ts` — **new.** `loadTopicGraph()` (cached), `buildPrereqMap()`, `computeNodeStatus()` with `mastered / in-progress / available / locked`
+- `server/src/routes/roadmap.ts` — rewrote `GET /api/roadmap`. Response now includes `edges` (id-based), per-topic `status`, `weakness`, `prereqIds`
+- `client/package.json` — added `@xyflow/react`
+- `client/src/lib/api.ts` — extended `RoadmapTopic`; added `RoadmapEdge` + `NodeStatus` types
+- `client/src/pages/RoadmapPage.tsx` — full rewrite. React Flow graph view with custom `TopicNode`, status-colored nodes, animated edges into "available" nodes, dimmed edges into locked ones, weakness ring overlay. Patterns grid kept below
+
+**Key design calls:**
+- Static graph JSON, not a DB table — curriculum is global; per-user adaptivity comes from computed status, not edge mutation. Changing the curriculum is a JSON edit, no migration
+- Edges returned as topic IDs — client doesn't resolve names; server drops edges referencing unknown topics (graph-file drift guard)
+- Manual layered layout (no dagre) — topological depth → y; alphabetical within row → x. ~30 lines, zero dependencies
+- Status semantics: `mastered` (score ≥ 80), `in-progress` (any attempts, < 80), `available` (no attempts, all prereqs mastered), `locked` (no attempts, prereqs unmet)
+- Weakness is an overlay, not a status — a topic can be `in-progress` AND weak; UI shows rose ring + reason badge
+- Edges into `available` nodes animate (visual "go here next" cue); edges into `locked` nodes are dimmed
+
+### Cycle C — Pattern Tracking Surface
+
+Surfaced per-pattern trends on both Roadmap and Tracker via score sparklines.
+
+**Files:**
+- `server/src/lib/db/queries/patterns.ts` — **new.** `getPatternsWithTrends(userId)` runs a single `findMany`, groups attempts by canonical patternId, returns the last 10 scores chronologically (failed → 0, else `aiScore ?? 0`, matching the EMA sample rule)
+- `server/src/routes/roadmap.ts` — patterns now include `recentScores`
+- `server/src/routes/progress.ts` — added `patterns` to the tracker bundle, filtered to `attemptCount > 0`, capped at top 6 by attempts
+- `client/src/components/Sparkline.tsx` — **new.** Pure-SVG sparkline, fixed 0–100 domain, handles empty + single-point gracefully
+- `client/src/lib/api.ts` — `RoadmapPattern.recentScores: number[]`; `ProgressResponse.patterns`
+- `client/src/pages/RoadmapPage.tsx` — pattern cards now render a sparkline
+- `client/src/pages/TrackerPage.tsx` — new `PatternProgressSection` with tone-coded sparklines (emerald ≥80, indigo ≥50, amber <50)
+
+**Key design calls:**
+- One DB round-trip for all pattern trends — group in memory rather than N queries
+- Failed attempts score as 0 in the trend, matching how mastery is computed (visual story stays consistent with the number)
+- Roadmap shows every pattern; Tracker shows only the user's top 6 by attempt count (signal vs. inventory)
+
+### Cycle E — Readiness Score
+
+Implemented the canonical formula from `CLAUDE.md` end-to-end.
+
+**Files:**
+- `server/src/lib/readiness/score.ts` — **new.** `computeReadiness(userId)` returns overall + 5 components with explicit weights (`dsaCoverage 0.30`, `difficultyHandled 0.20`, `consistency 0.15`, `mockPerformance 0.20`, `systemDesign 0.15`)
+- `server/src/routes/readiness.ts` — **new.** `GET /api/readiness` standalone endpoint
+- `server/src/routes/progress.ts` — readiness bundled into `/api/progress`
+- `server/src/index.ts` — registered `/api/readiness`
+- `client/src/lib/api.ts` — `ReadinessComponent`, `ReadinessResult`, `ProgressResponse.readiness`, `api.getReadiness()`
+- `client/src/pages/TrackerPage.tsx` — replaced placeholder with real `ReadinessSection`: large overall number, per-component bars with weight labels, dimmed unscored components
+
+**Key design calls:**
+- Component formulas:
+  - **DSA Coverage:** mean of all `TopicProgress.masteryScore` over the total topic count (untouched topics count as 0)
+  - **Difficulty Handled:** `min(easy,10)*3 + min(medium,10)*4 + min(hard,5)*6`, capped at 100
+  - **Consistency:** active days in the last 14 UTC days / 14 * 100
+  - **Mock Performance + System Design:** return `unscored: true` — Phase 4
+- Kept the canonical weights instead of redistributing — honest about the Phase 4 gap, dimmed unscored components in the UI
+- Per-component `detail` strings power the sub-text under each bar, no extra tooltip wiring
+
+### Cycle F — PostHog + Polish
+
+Wired analytics, page-view events, and a few long-overdue polish items.
+
+**Files:**
+- `client/src/lib/analytics.ts` — **new.** PostHog wrapper with idempotent `initAnalytics()`, `identifyUser()`, `track()`, `resetAnalytics()`. **No-op when `VITE_POSTHOG_KEY` is missing** — preserves auth-bypass smoke-test mode
+- `client/src/main.tsx` — `initAnalytics()` on boot
+- `client/src/store/userStore.ts` — `identifyUser()` after onboard, `resetAnalytics()` on sign-out
+- `client/src/pages/RoadmapPage.tsx` — fires `roadmap_viewed` on mount
+- `client/src/pages/TrackerPage.tsx` — fires `tracker_viewed` on mount
+- `client/package.json` — added `type-check` script (gap noted in Cycle A)
+- `.env.example` — added `VITE_POSTHOG_KEY`, `VITE_POSTHOG_HOST`
+- `server/src/lib/roadmap/graph.ts` — load-time graph validation: malformed edges, self-loops, DFS cycle check
+
+**Key design calls:**
+- Analytics is **opt-in by absence of key**, not by config flag. Local dev, CI, and the smoke-test mode all just work
+- StrictMode-safe: `initAnalytics()` short-circuits on second call
+- `autocapture: false`, `capture_pageview: false` — explicit events only, keeps the dataset honest
+- Phase-3 event set: `app_initialized`, `user_identified`, `roadmap_viewed`, `tracker_viewed`. Click-level events land when there's UI worth measuring
+- Graph validator runs once at first load — catches typoed prereqs and cycles before they corrupt the layout pass
+
+---
+
+## Upcoming Cycles (Phase 3.5 — UI Completion)
+
+Phases 1–3 built the full backend and two of four UI surfaces. The next cycles complete the remaining pages and the app shell, closing the core user loop: **Learn → Practice → Evaluate → Adapt**.
+
+### Cycle G — App Shell + Navigation
+
+**Goal:** Shared layout with persistent navigation so users can move between pages. Currently each page is a standalone component with no shared chrome.
+
+**Scope:**
+- `client/src/components/Layout.tsx` — shell component with sidebar/top nav
+  - Links: Roadmap, Problems, Tracker, Chat
+  - Active-route highlighting
+  - User button (Clerk `<UserButton />`) with sign-out
+  - Responsive: collapsible sidebar or tab bar on mobile
+- Wrap all protected routes in `<Layout>` inside `App.tsx`
+- Track `nav_clicked` events (analytics)
+- Type-check + visual verification
+
+**Key constraint:** Keep it minimal — Tailwind utilities only, no component library beyond what shadcn already provides. The nav shouldn't overshadow the pages.
+
+### Cycle H — Problems Page + Attempt Submission UI
+
+**Goal:** Browse recommended problems and submit attempts with AI evaluation. This is the "Practice → Evaluate" half of the loop.
+
+**Scope:**
+- `client/src/pages/ProblemsPage.tsx` — main surface:
+  - Fetch from `GET /api/problems?limit=10` (LLM-ranked recommendations)
+  - Problem cards: title, difficulty badge (Easy/Medium/Hard color-coded), topic, pattern, source link
+  - Click card → expand with attempt submission form
+- Attempt submission form:
+  - Status select (Solved / Attempted / Failed)
+  - Solve time input (minutes, with optional `useTimer` hook for auto-timing)
+  - Approach textarea (required, min 10 chars — matches backend validation)
+  - Hints used counter
+  - Submit → `POST /api/attempts` → show AI evaluation inline (score, feedback, complexity, pattern identified)
+- `client/src/lib/api.ts` — fix `getProblems` and `submitAttempt` to pass auth tokens
+- Track `problem_viewed`, `attempt_submitted` events
+- Type-check
+
+**Key design calls:**
+- Attempt submission is a modal/expandable panel, not a separate page — keep the user in context
+- AI evaluation result renders inline on the card after submission (score bar, feedback text, pattern badge)
+- `useTimer` hook already exists — wire it to auto-fill `solveTime` when the user opens a problem card
+- The `api.ts` methods `getProblems` and `submitAttempt` currently don't pass auth tokens — fix this
+
+### Cycle I — Chat Page
+
+**Goal:** Context-aware AI chat. The `useChat` hook and backend SSE route are already complete — this is purely a UI build.
+
+**Scope:**
+- `client/src/pages/ChatPage.tsx` — full chat interface:
+  - Message list with user/assistant bubbles (markdown rendering for assistant)
+  - Input bar with send button and abort (cancel streaming) button
+  - Loading indicator (typing dots) while streaming
+  - Auto-scroll to bottom on new messages
+  - Error banner with retry
+- Wire `useChat()` hook (already built: history load, SSE streaming, abort)
+- Optional: topic selector or "Ask about..." quick prompts derived from weak areas
+- Track `chat_message_sent` event
+- Type-check
+
+**Key design calls:**
+- Markdown rendering for assistant messages — use a lightweight lib (`react-markdown` or similar) since AI responses include code blocks, lists, and emphasis
+- Keep history in the hook's local state (already implemented), not Zustand — chat state doesn't need to persist across page navigations
+- The weak-areas-as-quick-prompts idea is optional polish, not a blocker
+
+### Cycle J — End-to-End Auth Smoke Test
+
+**Goal:** Validate the full app with real Clerk keys and a real database, covering the flow that auth-bypass mode can't test.
+
+**Scope:**
+- Sign up → onboard → browse roadmap → open a problem → submit attempt → see AI evaluation → check tracker updates → chat with AI about a weak area
+- Verify Clerk `<UserButton />` sign-out flow + analytics `resetAnalytics()`
+- Verify token refresh doesn't break SSE streaming mid-chat
+- Document any issues found, fix critical ones inline
+
+**Depends on:** Cycles G, H, I complete.

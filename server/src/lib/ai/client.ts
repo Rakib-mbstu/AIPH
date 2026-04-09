@@ -71,6 +71,34 @@ export interface EvaluationResult {
   score: number
 }
 
+export interface RecommendationCandidate {
+  problemId: string
+  title: string
+  difficulty: string
+  topic: string
+  pattern: string
+}
+
+export interface RecommendationInput {
+  currentTopic?: string
+  weakAreas: string[]
+  patternMastery: Record<string, number>
+  recentProblems: string[] // titles, for the model's benefit
+  problemPool: RecommendationCandidate[]
+}
+
+export interface Recommendation {
+  problemId: string
+  reason: string
+  difficulty: string
+  estimatedMinutes: number
+  priority: number
+}
+
+export interface RecommendationResult {
+  recommendations: Recommendation[]
+}
+
 export interface RoadmapInput {
   experienceLevel: string
   targetRole: string
@@ -260,5 +288,36 @@ export async function generateRoadmap(
     systemPrompt,
     'Generate the roadmap now based on the context above.',
     2000
+  )
+}
+
+// =============================================================================
+// Public: Problem recommendation
+// =============================================================================
+
+/**
+ * Rank the next problems for a user using their mastery + weak areas + a
+ * candidate pool. Returns a structured list with priorities and reasons.
+ *
+ * The pool is assembled by the caller (engine.ts) — keep it ≤ ~25 candidates
+ * so the model isn't drowning in context. Recently-attempted problems should
+ * already be filtered out before they hit this function.
+ */
+export async function recommendProblems(
+  input: RecommendationInput
+): Promise<RecommendationResult> {
+  const systemPrompt = renderPrompt('recommendation', {
+    currentTopic: input.currentTopic ?? 'none',
+    weakAreas: input.weakAreas.join(', ') || 'none',
+    patternMastery: JSON.stringify(input.patternMastery),
+    recentProblems: input.recentProblems.join(', ') || 'none',
+    problemPool: JSON.stringify(input.problemPool),
+  })
+
+  return completeJson<RecommendationResult>(
+    'recommendation',
+    systemPrompt,
+    'Pick the best 3-5 problems from the pool and return JSON.',
+    1200
   )
 }

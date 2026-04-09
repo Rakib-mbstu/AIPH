@@ -6,7 +6,12 @@ import {
   type AttemptRecord,
   type WeakAreaRecord,
   type PlanItem,
+  type RoadmapPattern,
+  type ReadinessResult,
+  type ReadinessComponent,
 } from '../lib/api'
+import { Sparkline } from '../components/Sparkline'
+import { track } from '../lib/analytics'
 
 /**
  * Progress Tracker — the home base.
@@ -16,13 +21,18 @@ import {
  *   2. Streak             — consecutive days with at least one attempt
  *   3. Recent Activity    — last 5 attempts with AI score badges
  *   4. Weak Areas         — open flags from the detection engine
- *   5. Readiness Score    — Phase 3 placeholder
+ *   5. Pattern Progress   — top patterns by attempts with trend sparklines
+ *   6. Readiness Score    — composite score + per-component breakdown
  */
 export default function TrackerPage() {
   const { getToken } = useAuth()
   const [data, setData] = useState<ProgressResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    track('tracker_viewed')
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -65,7 +75,9 @@ export default function TrackerPage() {
         <WeakAreasSection weakAreas={data.weakAreas} />
       </div>
 
-      <ReadinessPlaceholder />
+      <PatternProgressSection patterns={data.patterns} />
+
+      <ReadinessSection readiness={data.readiness} />
     </div>
   )
 }
@@ -161,14 +173,149 @@ function WeakAreasSection({ weakAreas }: { weakAreas: WeakAreaRecord[] }) {
   )
 }
 
-function ReadinessPlaceholder() {
+function PatternProgressSection({ patterns }: { patterns: RoadmapPattern[] }) {
   return (
-    <section className="border border-dashed border-gray-300 rounded-lg p-5 bg-gray-50">
-      <h2 className="text-lg font-semibold text-gray-700 mb-1">Readiness Score</h2>
-      <p className="text-sm text-gray-500">
-        Coming in Phase 3 — composite of DSA coverage, difficulty handled, consistency, mock performance, and system design.
+    <section className="border border-gray-200 rounded-lg p-5 bg-white shadow-sm">
+      <h2 className="text-lg font-semibold text-gray-900 mb-1">Pattern Progress</h2>
+      <p className="text-xs text-gray-500 mb-4">
+        Your score trajectory on the patterns you've attempted most. Flat = consistent, climbing = learning.
       </p>
+      {patterns.length === 0 ? (
+        <p className="text-sm text-gray-500">
+          Submit a few attempts to see pattern trends appear here.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {patterns.map((p) => (
+            <PatternTrendCard key={p.id} pattern={p} />
+          ))}
+        </div>
+      )}
     </section>
+  )
+}
+
+function PatternTrendCard({ pattern }: { pattern: RoadmapPattern }) {
+  const mastery = pattern.mastery?.masteryScore ?? 0
+  const attempts = pattern.mastery?.attemptCount ?? 0
+  const solved = pattern.mastery?.solvedCount ?? 0
+  const tone =
+    mastery >= 80
+      ? { stroke: '#059669', fill: 'rgba(5, 150, 105, 0.12)' } // emerald
+      : mastery >= 50
+        ? { stroke: '#6366f1', fill: 'rgba(99, 102, 241, 0.12)' } // indigo
+        : { stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.12)' } // amber
+
+  return (
+    <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+      <div className="flex items-baseline justify-between mb-1">
+        <h3 className="font-semibold text-sm text-gray-900 truncate">{pattern.name}</h3>
+        <span className="text-xs font-semibold text-gray-700">{mastery}</span>
+      </div>
+      <div className="text-[10px] text-gray-500 mb-2">
+        {solved}/{attempts} solved
+      </div>
+      <Sparkline
+        values={pattern.recentScores}
+        width={200}
+        height={36}
+        stroke={tone.stroke}
+        fill={tone.fill}
+      />
+    </div>
+  )
+}
+
+function ReadinessSection({ readiness }: { readiness: ReadinessResult }) {
+  const { overall, components } = readiness
+  const tone =
+    overall >= 70
+      ? 'text-emerald-600'
+      : overall >= 40
+        ? 'text-indigo-600'
+        : 'text-amber-600'
+
+  // Display order matches the formula in CLAUDE.md
+  const rows: Array<{ key: string; label: string; comp: ReadinessComponent }> = [
+    { key: 'dsa', label: 'DSA Coverage', comp: components.dsaCoverage },
+    {
+      key: 'difficulty',
+      label: 'Difficulty Handled',
+      comp: components.difficultyHandled,
+    },
+    { key: 'consistency', label: 'Consistency', comp: components.consistency },
+    {
+      key: 'mock',
+      label: 'Mock Performance',
+      comp: components.mockPerformance,
+    },
+    { key: 'design', label: 'System Design', comp: components.systemDesign },
+  ]
+
+  return (
+    <section className="border border-gray-200 rounded-lg p-5 bg-white shadow-sm">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Readiness Score</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Weighted composite. Mock & system design weights are unscored until Phase 4.
+          </p>
+        </div>
+        <div className="text-right">
+          <div className={`text-4xl font-bold ${tone}`}>{overall}</div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wide">/ 100</div>
+        </div>
+      </div>
+      <ul className="space-y-3">
+        {rows.map((row) => (
+          <ReadinessRow key={row.key} label={row.label} component={row.comp} />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function ReadinessRow({
+  label,
+  component,
+}: {
+  label: string
+  component: ReadinessComponent
+}) {
+  const pct = Math.max(0, Math.min(100, component.score))
+  const weightLabel = `${Math.round(component.weight * 100)}%`
+  const dim = component.unscored
+  const barColor = dim
+    ? 'bg-gray-300'
+    : pct >= 70
+      ? 'bg-emerald-500'
+      : pct >= 40
+        ? 'bg-indigo-500'
+        : 'bg-amber-500'
+
+  return (
+    <li>
+      <div className="flex items-baseline justify-between text-sm mb-1">
+        <div className={`font-medium ${dim ? 'text-gray-400' : 'text-gray-800'}`}>
+          {label}
+          <span className="ml-2 text-[10px] text-gray-400 uppercase tracking-wide">
+            weight {weightLabel}
+          </span>
+        </div>
+        <div className={`font-semibold ${dim ? 'text-gray-400' : 'text-gray-700'}`}>
+          {dim ? '—' : `${pct}/100`}
+        </div>
+      </div>
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full ${barColor} transition-all`}
+          style={{ width: `${dim ? 0 : pct}%` }}
+        />
+      </div>
+      {component.detail && (
+        <div className="text-[11px] text-gray-500 mt-1">{component.detail}</div>
+      )}
+    </li>
   )
 }
 
