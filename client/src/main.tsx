@@ -15,7 +15,11 @@ initAnalytics()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ClerkProvider publishableKey={publishableKey}>
+    <ClerkProvider
+      publishableKey={publishableKey}
+      afterSignInUrl="/roadmap"
+      afterSignUpUrl="/roadmap"
+    >
       <App />
     </ClerkProvider>
   </StrictMode>,

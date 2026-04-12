@@ -70,11 +70,11 @@ function EvaluationResult({ result }: { result: AttemptResult }) {
 
 function AttemptForm({
   problemId,
-  token,
+  getToken,
   difficulty,
 }: {
   problemId: string
-  token: string
+  getToken: () => Promise<string | null>
   difficulty: string
 }) {
   // Timer
@@ -123,6 +123,8 @@ function AttemptForm({
     setPhase('evaluating')
     setSubmitError(null)
     try {
+      const t = await getToken()
+      if (!t) { setSubmitError('Session expired — please refresh the page'); setPhase('idle'); return }
       const payload: AttemptPayload = {
         problemId,
         status,
@@ -130,7 +132,7 @@ function AttemptForm({
         hintsUsed,
         approachText: approachText.trim(),
       }
-      const res = await api.submitAttempt(token, payload)
+      const res = await api.submitAttempt(t, payload)
       if (res.error || !res.data) {
         setSubmitError(res.error ?? 'Submission failed')
         setPhase('idle')
@@ -278,12 +280,12 @@ function ProblemCard({
   problem,
   isExpanded,
   onToggle,
-  token,
+  getToken,
 }: {
   problem: RecommendedProblem
   isExpanded: boolean
   onToggle: () => void
-  token: string
+  getToken: () => Promise<string | null>
 }) {
   const difficultyBadge: Record<string, string> = {
     easy: 'bg-emerald-100 text-emerald-800',
@@ -347,7 +349,7 @@ function ProblemCard({
         <div className="px-4 pb-4">
           <AttemptForm
             problemId={problem.problemId}
-            token={token}
+            getToken={getToken}
             difficulty={problem.difficulty}
           />
         </div>
@@ -365,14 +367,12 @@ export default function ProblemsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [token, setToken] = useState<string | null>(null)
 
   const fetchProblems = async (topicFilter?: string, patternFilter?: string) => {
     setLoading(true)
     setError(null)
     const t = await getToken()
     if (!t) { setError('Not signed in'); setLoading(false); return }
-    setToken(t)
     const res = await api.getProblems(t, 10, topicFilter, patternFilter)
     if (res.error || !res.data) {
       setError(res.error ?? 'Failed to load problems')
@@ -476,7 +476,7 @@ export default function ProblemsPage() {
               id === problem.problemId ? null : problem.problemId
             )
           }
-          token={token ?? ''}
+          getToken={getToken}
         />
       ))}
     </div>

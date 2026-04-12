@@ -169,7 +169,30 @@ export interface AttemptResult {
   };
 }
 
-export type ChatTurn = { role: 'user' | 'assistant'; content: string };
+export type ChatTurn = { role: 'user' | 'assistant'; content: string }
+
+export interface AiCallRecord {
+  id: number
+  ts: string
+  useCase: string
+  model: string
+  wasFallback: boolean
+  status: 'success' | 'error' | 'fallback_success' | 'fallback_error'
+  latencyMs: number
+  promptPreview: string
+  responsePreview: string
+  approxPromptChars: number
+  approxResponseChars: number
+}
+
+export interface AiStats {
+  total: number
+  fallbacks?: number
+  errors?: number
+  avgLatencyMs?: number
+  byUseCase?: Record<string, number>
+  byModel?: Record<string, number>
+};
 
 /**
  * Stream a chat completion from the server. Yields token deltas as they
@@ -246,6 +269,15 @@ export async function apiCall<T>(
       ...rest,
     });
 
+    // Guard against non-JSON responses (HTML error pages, auth redirects, proxies).
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+      return {
+        error: `Server error (${response.status}) — unexpected response format`,
+        status: response.status,
+      };
+    }
+
     const data = await response.json();
 
     return {
@@ -316,4 +348,19 @@ export const api = {
   // Readiness
   getReadiness: (token: string) =>
     apiCall<ReadinessResult>('/readiness', { token }),
+
+  // Admin — AI call monitor (no Clerk token needed; uses ADMIN_KEY header)
+  getAiLogs: (limit = 100, adminKey?: string) =>
+    apiCall<{ logs: AiCallRecord[] }>(`/admin/ai-logs?limit=${limit}`, {
+      headers: adminKey ? { 'x-admin-key': adminKey } : {},
+    }),
+  getAiStats: (adminKey?: string) =>
+    apiCall<AiStats>('/admin/ai-stats', {
+      headers: adminKey ? { 'x-admin-key': adminKey } : {},
+    }),
+  clearAiLogs: (adminKey?: string) =>
+    apiCall<{ ok: boolean }>('/admin/ai-logs', {
+      method: 'DELETE',
+      headers: adminKey ? { 'x-admin-key': adminKey } : {},
+    }),
 };

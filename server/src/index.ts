@@ -41,6 +41,7 @@ import roadmapRoutes from './routes/roadmap'
 import weaknessRoutes from './routes/weakness'
 import problemsRoutes from './routes/problems'
 import readinessRoutes from './routes/readiness'
+import adminRoutes from './routes/admin'
 
 app.use('/api/users', usersRoutes)
 app.use('/api/chat', chatRoutes)
@@ -50,6 +51,7 @@ app.use('/api/roadmap', roadmapRoutes)
 app.use('/api/weakness', weaknessRoutes)
 app.use('/api/problems', problemsRoutes)
 app.use('/api/readiness', readinessRoutes)
+app.use('/api/admin', adminRoutes)
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

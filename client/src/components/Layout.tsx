@@ -47,7 +47,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* Spacer + UserButton */}
-        <div className="mt-auto px-4 py-4 border-t border-gray-100">
+        <div className="mt-auto px-4 py-4 border-t border-gray-100 space-y-3">
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              `flex items-center gap-2 text-xs px-2 py-1.5 rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-gray-100 text-gray-700 font-medium'
+                  : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+              }`
+            }
+          >
+            <span>🔍</span>
+            <span>AI Monitor</span>
+          </NavLink>
           <UserButton afterSignOutUrl="/" />
         </div>
       </aside>

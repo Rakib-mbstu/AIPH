@@ -379,7 +379,10 @@ NEXT_PUBLIC_POSTHOG_KEY=
 | 2 | Adaptive topic graph (prereqs + status), LLM recommendation engine (`/api/problems`) | ✅ Complete (Cycles B + D) |
 | 3 | Pattern tracking surface, readiness score, PostHog analytics | ✅ Complete (Cycles C + E + F) |
 | 3.5 | App shell + nav, Problems page + attempt UI, Chat page, auth smoke test | ✅ Complete (Cycles G + H + I + J) |
-| 4 | Mock interview mode, voice interviews, exportable reports | Out of scope (for now) |
+| 4 | UX polish, cross-page URL linking, loading skeletons, public homepage, AI call monitor | ✅ Complete (Cycles K + L + M + Q) |
+| 5 | Testing infrastructure (unit, integration, prompt regression) | Planned (Cycles N + O) |
+| 6 | Deployment (Docker, CI/CD, health endpoint) | Planned (Cycle P) |
+| 7 | Mock interview mode, voice interviews, exportable reports | Out of scope (for now) |
 
 **Cycle log:** see [`plan.md`](plan.md) for per-cycle implementation notes. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the engineering reference.
 

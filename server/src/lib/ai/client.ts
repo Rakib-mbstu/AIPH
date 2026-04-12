@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { renderPrompt } from './prompts'
+import { recordAiCall } from './logger'
 
 // =============================================================================
 // Configuration
@@ -28,15 +29,15 @@ const MODELS = {
     fallback: 'openai/gpt-4o-mini',
   },
   evaluation: {
-    primary: 'openai/gpt-4-turbo',
+    primary: 'openai/gpt-4o-mini',
     fallback: 'openai/gpt-4o-mini',
   },
   roadmap: {
-    primary: 'openai/gpt-4-turbo',
+    primary: 'openai/gpt-4o-mini',
     fallback: 'openai/gpt-4o-mini',
   },
   recommendation: {
-    primary: 'openai/gpt-4-turbo',
+    primary: 'openai/gpt-4o-mini',
     fallback: 'openai/gpt-4o-mini',
   },
 } as const
@@ -162,14 +163,55 @@ async function completeJson<T>(
     return JSON.parse(content) as T
   }
 
+  const t0 = Date.now()
   try {
-    return await makeCall(primary)
+    const result = await makeCall(primary)
+    recordAiCall({
+      useCase,
+      model: primary,
+      wasFallback: false,
+      status: 'success',
+      latencyMs: Date.now() - t0,
+      promptPreview: userPrompt.slice(0, 300),
+      responsePreview: JSON.stringify(result).slice(0, 300),
+      approxPromptChars: systemPrompt.length + userPrompt.length,
+      approxResponseChars: JSON.stringify(result).length,
+    })
+    return result
   } catch (err) {
     console.warn(
       `[ai/client] Primary model ${primary} failed for ${useCase}, falling back to ${fallback}:`,
       err instanceof Error ? err.message : err
     )
-    return await makeCall(fallback)
+    const t1 = Date.now()
+    try {
+      const result = await makeCall(fallback)
+      recordAiCall({
+        useCase,
+        model: fallback,
+        wasFallback: true,
+        status: 'fallback_success',
+        latencyMs: Date.now() - t1,
+        promptPreview: userPrompt.slice(0, 300),
+        responsePreview: JSON.stringify(result).slice(0, 300),
+        approxPromptChars: systemPrompt.length + userPrompt.length,
+        approxResponseChars: JSON.stringify(result).length,
+      })
+      return result
+    } catch (fallbackErr) {
+      recordAiCall({
+        useCase,
+        model: fallback,
+        wasFallback: true,
+        status: 'fallback_error',
+        latencyMs: Date.now() - t1,
+        promptPreview: userPrompt.slice(0, 300),
+        responsePreview: fallbackErr instanceof Error ? fallbackErr.message : 'unknown',
+        approxPromptChars: systemPrompt.length + userPrompt.length,
+        approxResponseChars: 0,
+      })
+      throw fallbackErr
+    }
   }
 }
 
@@ -195,6 +237,8 @@ export async function* streamChat(
   })
 
   const { primary, fallback } = MODELS.chat
+  const userPrompt = messages[messages.length - 1]?.content ?? ''
+  const t0 = Date.now()
 
   try {
     const stream = (await openrouter.chat.completions.create({
@@ -207,10 +251,25 @@ export async function* streamChat(
       stream: true,
     })) as unknown as AsyncIterable<any>
 
+    let assembled = ''
     for await (const chunk of stream) {
       const delta = chunk.choices?.[0]?.delta?.content
-      if (delta) yield delta
+      if (delta) {
+        assembled += delta
+        yield delta
+      }
     }
+    recordAiCall({
+      useCase: 'chat',
+      model: primary,
+      wasFallback: false,
+      status: 'success',
+      latencyMs: Date.now() - t0,
+      promptPreview: userPrompt.slice(0, 300),
+      responsePreview: assembled.slice(0, 300),
+      approxPromptChars: systemPrompt.length + userPrompt.length,
+      approxResponseChars: assembled.length,
+    })
   } catch (err) {
     console.warn(
       `[ai/client] Streaming failed on ${primary}, falling back to non-streaming ${fallback}:`,
@@ -218,6 +277,7 @@ export async function* streamChat(
     )
 
     // Fallback: single non-streaming call, yield entire response as one chunk
+    const t1 = Date.now()
     const response = await openrouter.chat.completions.create({
       model: fallback,
       max_tokens: 2000,
@@ -227,6 +287,17 @@ export async function* streamChat(
       ],
     })
     const content = response.choices[0]?.message?.content || ''
+    recordAiCall({
+      useCase: 'chat',
+      model: fallback,
+      wasFallback: true,
+      status: 'fallback_success',
+      latencyMs: Date.now() - t1,
+      promptPreview: userPrompt.slice(0, 300),
+      responsePreview: content.slice(0, 300),
+      approxPromptChars: systemPrompt.length + userPrompt.length,
+      approxResponseChars: content.length,
+    })
     yield content
   }
 }

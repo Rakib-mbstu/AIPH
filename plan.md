@@ -28,6 +28,13 @@
 | **Cycle H**. Problems page + attempt submission UI | ✅ Complete |
 | **Cycle I**. Chat page | ✅ Complete |
 | **Cycle J**. End-to-end auth smoke test (real Clerk keys) | ✅ Complete |
+| **Cycle K**. Cross-page URL param linking (topic/pattern/expand/highlight) | ✅ Complete |
+| **Cycle L**. Loading skeletons + error/empty states across all pages | ✅ Complete |
+| **Cycle M**. UX polish: document titles, keyboard nav, favicon, focus rings | ✅ Complete |
+| **Cycle Q**. Public homepage (`/`), sign-in/sign-up embedded Clerk routes | ✅ Complete |
+| **Bug fix**. `POST /api/chat` registered at `/kkkkkk` — chat 404'd silently | ✅ Fixed |
+| **Bug fix**. Stale token on attempt submit; `apiCall` HTML-response guard | ✅ Fixed |
+| **AI Monitor**. In-memory call logger, admin dashboard, `GET/DELETE /api/admin/ai-logs` | ✅ Complete |
 
 ---
 
@@ -225,9 +232,9 @@ PORT=4000
 | 2 | Adaptive roadmap (topic graph + status computation), LLM recommendation engine | ✅ Complete (Cycles B + D) |
 | 3 | Pattern tracking surface, readiness score, PostHog analytics | ✅ Complete (Cycles C + E + F) |
 | 3.5 | App shell, Problems page + attempt UI, Chat page, auth smoke test | ✅ Complete (Cycles G + H + I + J) |
-| 4 | UX polish, cross-page linking, LeetCode source links | Next (Cycles K + L + M) |
+| 4 | UX polish, cross-page linking, skeletons, public homepage, AI call monitor | ✅ Complete (Cycles K + L + M + Q) |
 | 5 | Testing infrastructure (unit, integration, prompt regression) | Planned (Cycles N + O) |
-| 6 | Deployment (Docker, CI/CD, production config) | Planned |
+| 6 | Deployment (Docker, CI/CD, production config) | Planned (Cycle P) |
 | 7 | Mock interview mode, voice, exportable reports | Out of scope (for now) |
 
 ---
@@ -343,15 +350,17 @@ All model calls route through OpenRouter via `server/src/lib/ai/client.ts`. No d
 | Use case | Primary | Fallback |
 |---|---|---|
 | Chat | `anthropic/claude-sonnet-4-20250514` | `openai/gpt-4o-mini` |
-| Evaluation | `openai/gpt-4-turbo` | `openai/gpt-4o-mini` |
-| Roadmap | `openai/gpt-4-turbo` | `openai/gpt-4o-mini` |
-| Recommendation | `openai/gpt-4-turbo` | `openai/gpt-4o-mini` |
+| Evaluation | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
+| Roadmap | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
+| Recommendation | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
 
 **Exports:**
 - `streamChat(messages, context)` → async generator, falls back to non-streaming on failure
 - `evaluateApproach(input)` → structured `EvaluationResult` JSON
 - `generateRoadmap(input)` → structured `RoadmapResult` JSON
-- Internal `completeJson()` helper handles JSON calls + logs every fallback
+- Internal `completeJson()` helper handles JSON calls + instruments every call via `logger.ts`
+
+**AI call monitoring:** `server/src/lib/ai/logger.ts` maintains an in-memory circular buffer (max 200 records). Every call to `completeJson` and `streamChat` records: timestamp, use-case, model, fallback flag, status, latency ms, prompt/response previews, approx char counts. Exposed via `GET /api/admin/ai-logs` and `GET /api/admin/ai-stats`.
 
 **Fallback strategy:** every function tries primary → on error, logs the failure reason and retries with fallback. Monitoring these logs tells us when a primary is degraded.
 

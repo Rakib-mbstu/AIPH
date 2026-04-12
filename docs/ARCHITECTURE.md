@@ -1,6 +1,6 @@
 # Interview Prep AI — Technical Documentation
 
-> Engineering reference for the AIPH codebase. Pairs with [`CLAUDE.md`](../CLAUDE.md) (product vision) and [`plan.md`](../plan.md) (implementation log). This document describes the system **as it is built today** (end of Phase 3 — Cycles A through F shipped).
+> Engineering reference for the AIPH codebase. Pairs with [`CLAUDE.md`](../CLAUDE.md) (product vision) and [`plan.md`](../plan.md) (implementation log). This document describes the system **as it is built today** (Phase 4 complete — Cycles A through M + Q shipped).
 
 ---
 
@@ -35,8 +35,9 @@ The **core invariant**: every meaningful user action (`POST /api/attempts`, `POS
 /
 ├── client/                       React + Vite SPA
 │   ├── src/
-│   │   ├── pages/                RoadmapPage.tsx (React Flow graph), TrackerPage.tsx (dashboard)
-│   │   ├── components/           Sparkline.tsx (SVG, zero-dep)
+│   │   ├── pages/                HomePage.tsx (public landing), RoadmapPage.tsx, TrackerPage.tsx,
+│   │   │                         ProblemsPage.tsx, ChatPage.tsx, AdminPage.tsx (AI call monitor)
+│   │   ├── components/           Layout.tsx (sidebar + mobile nav), Skeleton.tsx, Sparkline.tsx
 │   │   ├── store/                Zustand stores (userStore.ts bridges Clerk → local user)
 │   │   ├── hooks/                useChat.ts (SSE), useTimer.ts
 │   │   ├── lib/
@@ -58,10 +59,12 @@ The **core invariant**: every meaningful user action (`POST /api/attempts`, `POS
 │   │   │   ├── roadmap.ts        GET /api/roadmap, POST /generate (501)
 │   │   │   ├── problems.ts       GET /api/problems (LLM-ranked)
 │   │   │   ├── readiness.ts      GET /api/readiness
-│   │   │   └── weakness.ts       GET /api/weakness, /history
+│   │   │   ├── weakness.ts       GET /api/weakness, /history
+│   │   │   └── admin.ts          GET /api/admin/ai-logs, GET /api/admin/ai-stats, DELETE /api/admin/ai-logs
 │   │   └── lib/
 │   │       ├── ai/
-│   │       │   ├── client.ts     OpenRouter abstraction + fallback
+│   │       │   ├── client.ts     OpenRouter abstraction + fallback + call instrumentation
+│   │       │   ├── logger.ts     In-memory circular buffer (200 records) for AI call monitoring
 │   │       │   ├── prompts.ts    Markdown prompt loader + templating
 │   │       │   └── prompts/      chat.md, evaluation.md, roadmap.md, recommendation.md, weakness.md
 │   │       ├── db/queries/       chatContext.ts, mastery.ts, streak.ts, users.ts, patterns.ts
@@ -166,9 +169,9 @@ Recovery: 3 solved-in-a-row on a topic/pattern sets `resolvedAt` instead of dele
 | Use case | Primary | Fallback |
 |---|---|---|
 | `chat` | `anthropic/claude-sonnet-4-20250514` | `openai/gpt-4o-mini` |
-| `evaluation` | `openai/gpt-4-turbo` | `openai/gpt-4o-mini` |
-| `roadmap` | `openai/gpt-4-turbo` | `openai/gpt-4o-mini` |
-| `recommendation` | `openai/gpt-4-turbo` | `openai/gpt-4o-mini` |
+| `evaluation` | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
+| `roadmap` | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
+| `recommendation` | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
 
 ### Public surface
 
@@ -179,7 +182,21 @@ Recovery: 3 solved-in-a-row on a topic/pattern sets `resolvedAt` instead of dele
 | `generateRoadmap(input)` | Returns structured `RoadmapResult` JSON | Same fallback behavior |
 | `recommendProblems(input)` | Returns ranked `{problemId, reason}[]` | Same fallback behavior; caller also has a deterministic fallback |
 
-`completeJson<T>()` is the internal helper for structured calls. Forces `response_format: json_object`, `temperature: 0`, and parses the response into `T`. Every fallback invocation is logged so we can monitor primary-model reliability.
+`completeJson<T>()` is the internal helper for structured calls. Forces `response_format: json_object`, `temperature: 0`, and parses the response into `T`. Every call (success, fallback, error) is recorded into the in-memory logger in `logger.ts`.
+
+### AI call monitoring
+
+[`server/src/lib/ai/logger.ts`](../server/src/lib/ai/logger.ts) maintains a circular buffer of the last 200 AI calls. Each record captures: id, ISO timestamp, use-case, model, fallback flag, status (`success` | `fallback_success` | `error` | `fallback_error`), latency ms, prompt/response previews (300 chars), and approximate char counts.
+
+Exposed read-only via [`server/src/routes/admin.ts`](../server/src/routes/admin.ts):
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/api/admin/ai-logs?limit=N` | Recent calls (max 200), newest first |
+| GET | `/api/admin/ai-stats` | Aggregated: total, fallbacks, errors, avg latency, by use-case + model |
+| DELETE | `/api/admin/ai-logs` | Wipe the buffer |
+
+Protected by an optional `ADMIN_KEY` env var checked as `x-admin-key` header. When unset, routes are open (dev convenience). The `AdminPage` at `/admin` in the frontend visualises this data with a latency bar chart, per-use-case table, and a model breakdown bar chart.
 
 ### Prompts as files, never strings
 
@@ -411,6 +428,14 @@ All routes are JSON unless noted. All `/api/*` routes require a Clerk session ex
 | GET | `/api/weakness` | ✓ | Currently unresolved weak areas, severity-sorted. |
 | GET | `/api/weakness/history` | ✓ | Up to 100 weak areas including resolved ones, newest first. |
 
+### Admin (AI monitor)
+
+| Method | Route | Auth | Purpose |
+|---|---|---|---|
+| GET | `/api/admin/ai-logs?limit=N` | `x-admin-key` (optional) | Last N AI calls (max 200), newest first |
+| GET | `/api/admin/ai-stats` | `x-admin-key` (optional) | Aggregated stats: total, fallbacks, errors, avg latency, by use-case + model |
+| DELETE | `/api/admin/ai-logs` | `x-admin-key` (optional) | Wipe in-memory buffer |
+
 ### Health
 
 | Method | Route | Auth | Purpose |
@@ -423,14 +448,23 @@ All routes are JSON unless noted. All `/api/*` routes require a Clerk session ex
 
 ### Routing
 
-[`client/src/App.tsx`](../client/src/App.tsx) defines four routes, all gated with `<SignedIn>`:
+[`client/src/App.tsx`](../client/src/App.tsx) defines these routes:
 
-- `/roadmap` — `RoadmapPage` (React Flow graph + pattern cards with sparklines)
-- `/tracker` — `TrackerPage` (today's plan, recent activity, weak areas, pattern trends, readiness)
-- `/chat` — placeholder, `ChatPage` is WIP
-- `/problems` — placeholder, `ProblemsPage` is WIP
+**Public:**
+- `/` — `HomePage` (landing page, visible to everyone; signed-in users see "Go to Dashboard" CTA)
+- `/sign-in/*` — Clerk embedded sign-in form
+- `/sign-up/*` — Clerk embedded sign-up form
 
-`/` redirects to sign-in via Clerk; unknown routes fall back to `/roadmap`.
+**Protected (require Clerk session):**
+- `/roadmap` — `RoadmapPage` (React Flow topic graph + pattern cards; click node → `/problems?topic=…`)
+- `/tracker` — `TrackerPage` (plan, recent attempts, weak areas, pattern trends, readiness score)
+- `/problems` — `ProblemsPage` (LLM-ranked cards + inline attempt form with AI evaluation)
+- `/chat` — `ChatPage` (SSE streaming chat with context)
+- `/admin` — `AdminPage` (AI call monitor dashboard; no Clerk enforcement beyond session)
+
+Unknown routes fall back to `/`.
+
+After sign-in/sign-up, Clerk redirects to `/roadmap` (`afterSignInUrl` / `afterSignUpUrl` in `ClerkProvider`).
 
 ### State
 
@@ -496,6 +530,7 @@ OPENROUTER_API_KEY=sk-or-...
 CLERK_SECRET_KEY=sk_test_...
 CLERK_PUBLISHABLE_KEY=pk_test_...
 PORT=4000
+ADMIN_KEY=                           # optional — protects /api/admin/* routes via x-admin-key header
 
 # client/.env
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
@@ -528,6 +563,10 @@ These are the choices that shape the rest of the codebase. Read them before prop
 | **LLM-ranked recommendations** (Cycle D) | Pool pre-assembled server-side so the model ranks a prioritized shortlist rather than sifting all 54 problems. Hallucination guard drops unknown IDs. Deterministic fallback on any AI failure. |
 | **Readiness: honest about Phase 4 gaps** (Cycle E) | Kept canonical weights, returned `unscored: true` for Mock + System Design. A 70 today is a real 70, not inflated over partial weights. |
 | **PostHog opt-in by key absence** (Cycle F) | No config flag, no conditional import. Module functions check `enabled` internally. Zero dev-mode noise. |
+| **Cross-page navigation via URL params** (Cycle K) | Tracker plan items link to `/problems?expand=<id>`, weak areas to `/roadmap?highlight=<id>`, roadmap nodes to `/problems?topic=<name>`. Params are read on mount then cleaned from the URL so bookmarks don't re-trigger filters. |
+| **Token freshness at submit time** | `AttemptForm` calls `getToken()` at the moment of submission, not at page load. Clerk automatically refreshes the session if needed. The cached token from page load is never used for writes. |
+| **`apiCall` non-JSON guard** | Before calling `response.json()`, `apiCall` checks `Content-Type`. Non-JSON responses (auth redirects, proxy errors, HTML error pages) surface as `"Server error (N) — unexpected response format"` instead of a raw `SyntaxError`. |
+| **In-memory AI call log** | `logger.ts` uses a fixed-size circular array (max 200). No DB write, no external service. Resets on server restart by design — this is an operational debugging tool, not audit storage. |
 
 ---
 
@@ -538,6 +577,10 @@ These are the choices that shape the rest of the codebase. Read them before prop
 | 1 | Scaffold, Clerk auth, Express + Prisma, AI chat (SSE), AI approach evaluation, static roadmap, tracker, passive weakness detection | ✅ Complete |
 | 2 | Adaptive roadmap (topic graph + React Flow), LLM recommendation engine (`/api/problems`) | ✅ Complete (Cycles B + D) |
 | 3 | Pattern tracking surface, readiness score, PostHog analytics | ✅ Complete (Cycles C + E + F) |
-| 4 | Mock interview mode, voice interviews, exportable reports | Out of scope (for now) |
+| 3.5 | App shell + nav, Problems page + attempt UI, Chat page, auth smoke test | ✅ Complete (Cycles G + H + I + J) |
+| 4 | UX polish (skeletons, cross-page links, titles), public homepage, AI call monitor, bug fixes | ✅ Complete (Cycles K + L + M + Q) |
+| 5 | Testing infrastructure (unit, integration, prompt regression) | Planned (Cycles N + O) |
+| 6 | Deployment (Docker, CI/CD, production config) | Planned (Cycle P) |
+| 7 | Mock interview mode, voice interviews, exportable reports | Out of scope (for now) |
 
 See [`plan.md`](../plan.md) for the per-cycle implementation log.
