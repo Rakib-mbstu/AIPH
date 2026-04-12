@@ -146,9 +146,11 @@ export interface RecommendedProblem {
 export interface AttemptPayload {
   problemId: string;
   status: 'solved' | 'attempted' | 'failed';
-  solveTime: number;       // minutes
+  solveTime: number;        // minutes
   hintsUsed?: number;
-  approachText: string;    // min 10 chars
+  approachText?: string;    // min 10 chars when provided; OR provide codeSubmission
+  language?: string;        // e.g. 'python', 'javascript'
+  codeSubmission?: string;  // actual code; satisfies the approach requirement on its own
 }
 
 export interface AttemptResult {

@@ -60,6 +60,8 @@ export interface EvaluationInput {
   expectedPattern: string
   topic: string
   approachText: string
+  language?: string       // e.g. "python", "javascript"
+  codeSubmission?: string // actual code the user wrote
 }
 
 export interface EvaluationResult {
@@ -316,7 +318,23 @@ export async function evaluateApproach(
   input: EvaluationInput
 ): Promise<EvaluationResult> {
   const systemPrompt = renderPrompt('evaluation', {})
-  const userPrompt = `
+  const userPrompt = input.codeSubmission
+    ? `
+Problem: ${input.problemTitle}
+Difficulty: ${input.difficulty}
+Expected Pattern: ${input.expectedPattern}
+Topic: ${input.topic}
+Language: ${input.language ?? 'unknown'}
+
+User's Code Submission:
+\`\`\`${input.language ?? ''}
+${input.codeSubmission}
+\`\`\`
+
+Written Approach Notes:
+${input.approachText || '(none provided)'}
+`.trim()
+    : `
 Problem: ${input.problemTitle}
 Difficulty: ${input.difficulty}
 Expected Pattern: ${input.expectedPattern}
