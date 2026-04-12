@@ -13,7 +13,9 @@ const router = Router()
  * (the client should then show "no signal yet, attempt a problem first").
  *
  * Query params:
- *   limit  — max recommendations (default 5, max 10)
+ *   limit   — max recommendations (default 5, max 10)
+ *   topic   — optional topic name to bias recommendations toward
+ *   pattern — optional pattern name to bias recommendations toward
  */
 router.get('/', protect, async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -26,7 +28,10 @@ router.get('/', protect, async (req: Request, res: Response, next: NextFunction)
       10
     )
 
-    const recommendations = await recommendForUser(user.id, limit)
+    const topic = req.query.topic ? String(req.query.topic) : undefined
+    const pattern = req.query.pattern ? String(req.query.pattern) : undefined
+
+    const recommendations = await recommendForUser(user.id, limit, { topic, pattern })
     res.json({ recommendations })
   } catch (err) {
     next(err)

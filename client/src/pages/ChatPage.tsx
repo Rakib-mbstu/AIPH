@@ -156,6 +156,7 @@ export default function ChatPage() {
   const [errorDismissed, setErrorDismissed] = useState(false)
 
   useEffect(() => {
+    document.title = 'Chat | AIPH'
     track('chat_viewed')
   }, [])
 

@@ -36,13 +36,15 @@ export interface RankedRecommendation {
   reason: string
   priority: number
   estimatedMinutes: number
+  source: string | null
 }
 
 const POOL_CAP = 25
 
 export async function recommendForUser(
   userId: string,
-  limit = 5
+  limit = 5,
+  filters?: { topic?: string; pattern?: string }
 ): Promise<RankedRecommendation[]> {
   // ---- 1. Skip set: anything attempted in the last 20 sessions ----
   const recentlyAttempted = await prisma.attempt.findMany({
@@ -94,13 +96,34 @@ export async function recommendForUser(
   ]
 
   const pool: RecommendationCandidate[] = []
+  // Track source URLs separately — source is not sent to the LLM
+  const sourceMap = new Map<string, string | null>()
 
-  if (priorityTopicIds.length > 0) {
-    const priorityProblems = await prisma.problem.findMany({
-      where: { topicId: { in: priorityTopicIds }, id: { notIn: [...skipIds] } },
+  // Filter bias: prepend problems from requested topic/pattern first
+  if (filters?.topic || filters?.pattern) {
+    const biasProblems = await prisma.problem.findMany({
+      where: {
+        id: { notIn: [...skipIds] },
+        ...(filters.topic ? { topic: { name: { contains: filters.topic, mode: 'insensitive' } } } : {}),
+        ...(filters.pattern ? { pattern: { name: { contains: filters.pattern, mode: 'insensitive' } } } : {}),
+      },
       include: { topic: true, pattern: true },
       take: POOL_CAP,
     })
+    for (const p of biasProblems) sourceMap.set(p.id, p.source)
+    pool.push(...biasProblems.map(toCandidate))
+  }
+
+  if (pool.length < POOL_CAP && priorityTopicIds.length > 0) {
+    const priorityProblems = await prisma.problem.findMany({
+      where: {
+        topicId: { in: priorityTopicIds },
+        id: { notIn: [...skipIds, ...pool.map((p) => p.problemId)] },
+      },
+      include: { topic: true, pattern: true },
+      take: POOL_CAP - pool.length,
+    })
+    for (const p of priorityProblems) sourceMap.set(p.id, p.source)
     pool.push(...priorityProblems.map(toCandidate))
   }
 
@@ -113,6 +136,7 @@ export async function recommendForUser(
       take: POOL_CAP - pool.length,
       orderBy: { createdAt: 'asc' },
     })
+    for (const p of backfill) sourceMap.set(p.id, p.source)
     pool.push(...backfill.map(toCandidate))
   }
 
@@ -150,6 +174,7 @@ export async function recommendForUser(
           reason: r.reason,
           priority: r.priority,
           estimatedMinutes: r.estimatedMinutes,
+          source: sourceMap.get(c.problemId) ?? null,
         }
       })
   } catch (err) {

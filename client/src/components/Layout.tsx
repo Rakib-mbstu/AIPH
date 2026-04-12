@@ -12,7 +12,7 @@ const NAV_ITEMS = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     [
-      'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+      'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500',
       isActive
         ? 'bg-indigo-50 text-indigo-700 font-semibold'
         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
@@ -65,7 +65,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             to={item.to}
             className={({ isActive }) =>
               [
-                'flex-1 flex flex-col items-center justify-center py-2 text-xs transition-colors',
+                'flex-1 flex flex-col items-center justify-center py-2 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500',
                 isActive
                   ? 'text-indigo-700 font-semibold'
                   : 'text-gray-500 hover:text-gray-700',

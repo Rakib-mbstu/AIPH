@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import {
   api,
@@ -7,6 +8,7 @@ import {
   type AttemptResult,
 } from '../lib/api'
 import { track } from '../lib/analytics'
+import { Skeleton } from '../components/Skeleton'
 
 // ─── EvaluationResult ────────────────────────────────────────────────────────
 
@@ -107,18 +109,18 @@ function AttemptForm({
   const [solveTime, setSolveTime] = useState(0)
   const [hintsUsed, setHintsUsed] = useState(0)
   const [approachText, setApproachText] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [phase, setPhase] = useState<'idle' | 'evaluating' | 'done'>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [result, setResult] = useState<AttemptResult | null>(null)
 
   const canSubmit =
     status !== null &&
     approachText.trim().length >= 10 &&
-    !submitting
+    phase === 'idle'
 
   const handleSubmit = async () => {
     if (!canSubmit || status === null) return
-    setSubmitting(true)
+    setPhase('evaluating')
     setSubmitError(null)
     try {
       const payload: AttemptPayload = {
@@ -131,12 +133,15 @@ function AttemptForm({
       const res = await api.submitAttempt(token, payload)
       if (res.error || !res.data) {
         setSubmitError(res.error ?? 'Submission failed')
+        setPhase('idle')
       } else {
         setResult(res.data)
+        setPhase('done')
         track('attempt_submitted', { problemId, status, difficulty })
       }
-    } finally {
-      setSubmitting(false)
+    } catch {
+      setSubmitError('Something went wrong')
+      setPhase('idle')
     }
   }
 
@@ -235,19 +240,26 @@ function AttemptForm({
       </div>
 
       {/* Submit */}
-      {!result && (
+      {phase !== 'done' && (
         <button
           onClick={handleSubmit}
           disabled={!canSubmit}
           className={[
-            'w-full py-2 rounded-lg text-sm font-semibold transition-colors',
+            'w-full py-2 rounded-lg text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500',
             canSubmit
               ? 'bg-indigo-600 text-white hover:bg-indigo-700'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed',
           ].join(' ')}
         >
-          {submitting ? 'Evaluating…' : 'Submit Attempt'}
+          Submit Attempt
         </button>
+      )}
+
+      {phase === 'evaluating' && (
+        <div className="flex items-center gap-2 text-sm text-indigo-600">
+          <span className="inline-block w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          Evaluating your approach…
+        </div>
       )}
 
       {submitError && (
@@ -301,7 +313,20 @@ function ProblemCard({
               </span>
             </div>
             <p className="text-xs text-gray-500 italic">{problem.reason}</p>
-            <p className="text-xs text-gray-400 mt-1">~{problem.estimatedMinutes} min</p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-xs text-gray-400">~{problem.estimatedMinutes} min</p>
+              {problem.source && (
+                <a
+                  href={problem.source}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 text-xs text-indigo-600 hover:text-indigo-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Solve on LeetCode <span aria-hidden>↗</span>
+                </a>
+              )}
+            </div>
           </div>
           <button
             onClick={onToggle}
@@ -335,20 +360,20 @@ function ProblemCard({
 
 export default function ProblemsPage() {
   const { getToken } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [problems, setProblems] = useState<RecommendedProblem[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
 
-  const fetchProblems = async () => {
+  const fetchProblems = async (topicFilter?: string, patternFilter?: string) => {
     setLoading(true)
     setError(null)
-    setExpandedId(null)
     const t = await getToken()
     if (!t) { setError('Not signed in'); setLoading(false); return }
     setToken(t)
-    const res = await api.getProblems(t, 10)
+    const res = await api.getProblems(t, 10, topicFilter, patternFilter)
     if (res.error || !res.data) {
       setError(res.error ?? 'Failed to load problems')
     } else {
@@ -358,12 +383,62 @@ export default function ProblemsPage() {
   }
 
   useEffect(() => {
+    document.title = 'Problems | AIPH'
     track('problems_viewed')
-    fetchProblems()
+    const expandParam = searchParams.get('expand')
+    const topicParam = searchParams.get('topic') ?? undefined
+    const patternParam = searchParams.get('pattern') ?? undefined
+
+    // Clean URL params after reading so bookmarks don't re-trigger
+    const cleaned = new URLSearchParams(searchParams)
+    cleaned.delete('expand')
+    cleaned.delete('topic')
+    cleaned.delete('pattern')
+    if ([...cleaned].length !== [...searchParams].length) {
+      setSearchParams(cleaned, { replace: true })
+    }
+
+    fetchProblems(topicParam, patternParam).then(() => {
+      if (expandParam) setExpandedId(expandParam)
+    })
   }, [])
 
-  if (loading) return <div className="p-8 text-gray-500">Loading recommendations…</div>
-  if (error) return <div className="p-8 text-red-600">Error: {error}</div>
+  if (loading) return (
+    <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-36" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Skeleton className="h-9 w-20 rounded-lg" />
+      </div>
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="border border-gray-200 rounded-lg bg-white p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-5 w-24 rounded-full" />
+          </div>
+          <Skeleton className="h-3 w-3/4" />
+          <Skeleton className="h-3 w-20" />
+        </div>
+      ))}
+    </div>
+  )
+  if (error) return (
+    <div className="max-w-md mx-auto p-8 text-center space-y-3">
+      <p className="text-red-600 text-sm">{error}</p>
+      <button
+        onClick={() => fetchProblems()}
+        className="text-sm px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        Retry
+      </button>
+    </div>
+  )
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -376,8 +451,8 @@ export default function ProblemsPage() {
           </p>
         </div>
         <button
-          onClick={fetchProblems}
-          className="text-sm px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          onClick={() => fetchProblems()}
+          className="text-sm px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           Refresh
         </button>

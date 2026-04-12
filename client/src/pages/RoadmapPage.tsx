@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import {
   ReactFlow,
@@ -19,6 +20,7 @@ import {
   type NodeStatus,
 } from '../lib/api'
 import { Sparkline } from '../components/Sparkline'
+import { Skeleton } from '../components/Skeleton'
 import { track } from '../lib/analytics'
 
 /**
@@ -33,12 +35,22 @@ import { track } from '../lib/analytics'
  */
 export default function RoadmapPage() {
   const { getToken } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [data, setData] = useState<RoadmapResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
 
   useEffect(() => {
+    document.title = 'Roadmap | AIPH'
     track('roadmap_viewed')
+    const h = searchParams.get('highlight')
+    if (h) {
+      setHighlightId(h)
+      const cleaned = new URLSearchParams(searchParams)
+      cleaned.delete('highlight')
+      setSearchParams(cleaned, { replace: true })
+    }
   }, [])
 
   useEffect(() => {
@@ -66,15 +78,54 @@ export default function RoadmapPage() {
     return buildFlow(data.topics, data.edges)
   }, [data])
 
-  if (loading) return <div className="p-8 text-gray-500">Loading roadmap…</div>
-  if (error) return <div className="p-8 text-red-600">Error: {error}</div>
+  // Apply highlight overlay to matching node
+  const finalNodes = useMemo(() => {
+    if (!highlightId) return nodes
+    return nodes.map((n) => {
+      const topic = (n.data as { topic: RoadmapTopic }).topic
+      if (topic.id === highlightId) {
+        return { ...n, data: { ...n.data, highlighted: true } }
+      }
+      return n
+    })
+  }, [nodes, highlightId])
+
+  if (loading) return (
+    <div className="max-w-6xl mx-auto p-6 space-y-8">
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-48" />
+        <Skeleton className="h-4 w-72" />
+      </div>
+      <div className="flex gap-4">
+        {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-4 w-20" />)}
+      </div>
+      <Skeleton className="h-[400px] w-full rounded-lg" />
+      <div>
+        <Skeleton className="h-6 w-24 mb-4" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-28 rounded-lg" />)}
+        </div>
+      </div>
+    </div>
+  )
+  if (error) return (
+    <div className="max-w-md mx-auto p-8 text-center space-y-3">
+      <p className="text-red-600 text-sm">{error}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="text-sm px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        Retry
+      </button>
+    </div>
+  )
   if (!data) return <div className="p-8 text-gray-500">No roadmap data.</div>
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-10">
       <header>
-        <h1 className="text-3xl font-bold text-gray-900">Your Roadmap</h1>
-        <p className="text-gray-600 mt-1">
+        <h1 className="text-2xl font-bold text-gray-900">Your Roadmap</h1>
+        <p className="text-sm text-gray-500 mt-0.5">
           Topics unlock as you master their prerequisites. Weak areas are highlighted.
         </p>
       </header>
@@ -87,9 +138,9 @@ export default function RoadmapPage() {
           <Legend color="bg-gray-300" label="Locked" />
           <Legend color="bg-rose-500" label="Weak area" ring />
         </div>
-        <div className="border border-gray-200 rounded-lg bg-white" style={{ height: 560 }}>
+        <div className="border border-gray-200 rounded-lg bg-white" style={{ height: 'min(560px, 70vh)' }}>
           <ReactFlow
-            nodes={nodes}
+            nodes={finalNodes}
             edges={edges}
             nodeTypes={nodeTypes}
             fitView
@@ -97,6 +148,7 @@ export default function RoadmapPage() {
             nodesDraggable={false}
             nodesConnectable={false}
             elementsSelectable={false}
+            minZoom={0.5}
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={16} color="#e5e7eb" />
@@ -202,16 +254,38 @@ function buildFlow(
 // ============================================================================
 
 function TopicNode({ data }: NodeProps) {
-  const topic = (data as { topic: RoadmapTopic }).topic
+  const navigate = useNavigate()
+  const topic = (data as { topic: RoadmapTopic; highlighted?: boolean }).topic
+  const highlighted = (data as { highlighted?: boolean }).highlighted === true
   const pct = Math.max(0, Math.min(100, topic.progress?.masteryScore ?? 0))
   const { bg, border, text } = statusStyles(topic.status)
   const isWeak = topic.weakness !== null
+  const isClickable = topic.status !== 'locked'
+
+  const handleNav = () => {
+    if (isClickable) {
+      track('cross_nav', { from: 'roadmap', to: 'problems', topic: topic.name })
+      navigate(`/problems?topic=${encodeURIComponent(topic.name)}`)
+    }
+  }
 
   return (
     <div
-      className={`rounded-lg border-2 ${border} ${bg} ${text} px-3 py-2 w-[180px] shadow-sm ${
-        isWeak ? 'ring-2 ring-rose-400 ring-offset-2' : ''
-      }`}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onClick={handleNav}
+      onKeyDown={(e) => {
+        if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          handleNav()
+        }
+      }}
+      className={[
+        `rounded-lg border-2 ${border} ${bg} ${text} px-3 py-2 w-[180px] shadow-sm`,
+        isWeak ? 'ring-2 ring-rose-400 ring-offset-2' : '',
+        highlighted ? 'ring-4 ring-amber-400 ring-offset-2 animate-pulse' : '',
+        isClickable ? 'cursor-pointer hover:ring-2 hover:ring-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500' : '',
+      ].join(' ')}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="font-semibold text-sm leading-tight">{topic.name}</div>
@@ -272,12 +346,28 @@ function Legend({ color, label, ring }: { color: string; label: string; ring?: b
 }
 
 function PatternCard({ pattern }: { pattern: RoadmapPattern }) {
+  const navigate = useNavigate()
   const score = pattern.mastery?.masteryScore ?? 0
   const confidence = pattern.mastery?.confidenceScore ?? 0
   const solved = pattern.mastery?.solvedCount ?? 0
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => {
+        track('cross_nav', { from: 'roadmap', to: 'problems', pattern: pattern.name })
+        navigate(`/problems?pattern=${encodeURIComponent(pattern.name)}`)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          track('cross_nav', { from: 'roadmap', to: 'problems', pattern: pattern.name })
+          navigate(`/problems?pattern=${encodeURIComponent(pattern.name)}`)
+        }
+      }}
+      className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm hover:shadow-md cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-indigo-500"
+    >
       <div className="flex items-start justify-between mb-2">
         <h3 className="font-semibold text-gray-900">{pattern.name}</h3>
         <span className="text-xs text-gray-500">{solved} solved</span>

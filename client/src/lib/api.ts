@@ -140,6 +140,7 @@ export interface RecommendedProblem {
   reason: string;
   priority: number;
   estimatedMinutes: number;
+  source: string | null;
 }
 
 export interface AttemptPayload {
@@ -284,11 +285,15 @@ export const api = {
     apiCall('/roadmap/generate', { method: 'POST', token }),
 
   // Problems
-  getProblems: (token: string, limit = 10) =>
-    apiCall<{ recommendations: RecommendedProblem[] }>(
-      `/problems?limit=${limit}`,
+  getProblems: (token: string, limit = 10, topic?: string, pattern?: string) => {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (topic) params.set('topic', topic)
+    if (pattern) params.set('pattern', pattern)
+    return apiCall<{ recommendations: RecommendedProblem[] }>(
+      `/problems?${params}`,
       { token }
-    ),
+    )
+  },
 
   // Attempts
   submitAttempt: (token: string, attemptData: AttemptPayload) =>

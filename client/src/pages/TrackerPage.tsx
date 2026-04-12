@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@clerk/clerk-react'
 import {
   api,
@@ -11,6 +12,7 @@ import {
   type ReadinessComponent,
 } from '../lib/api'
 import { Sparkline } from '../components/Sparkline'
+import { Skeleton } from '../components/Skeleton'
 import { track } from '../lib/analytics'
 
 /**
@@ -31,39 +33,96 @@ export default function TrackerPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    document.title = 'Tracker | AIPH'
     track('tracker_viewed')
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const token = await getToken()
-      if (!token) {
-        setError('Not signed in')
-        setLoading(false)
-        return
-      }
-      const res = await api.getProgress(token)
-      if (cancelled) return
-      if (res.error) setError(res.error)
-      else setData(res.data ?? null)
+  const fetchProgress = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    const token = await getToken()
+    if (!token) {
+      setError('Not signed in')
       setLoading(false)
-    })()
-    return () => {
-      cancelled = true
+      return
     }
+    const res = await api.getProgress(token)
+    if (res.error) setError(res.error)
+    else setData(res.data ?? null)
+    setLoading(false)
   }, [getToken])
 
-  if (loading) return <div className="p-8 text-gray-500">Loading tracker…</div>
-  if (error) return <div className="p-8 text-red-600">Error: {error}</div>
+  useEffect(() => {
+    fetchProgress()
+  }, [fetchProgress])
+
+  if (loading) return (
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-56" />
+        <Skeleton className="h-4 w-64" />
+      </div>
+      <div className="border border-gray-200 rounded-lg p-5 bg-white space-y-3">
+        <Skeleton className="h-5 w-28" />
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-4 w-full" />)}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {[1, 2].map((i) => (
+          <div key={i} className="border border-gray-200 rounded-lg p-5 bg-white space-y-3">
+            <Skeleton className="h-5 w-32" />
+            {[1, 2, 3].map((j) => <Skeleton key={j} className="h-4 w-full" />)}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Skeleton className="h-40 rounded-lg" />
+        <Skeleton className="h-40 rounded-lg" />
+      </div>
+    </div>
+  )
+  if (error) return (
+    <div className="max-w-md mx-auto p-8 text-center space-y-3">
+      <p className="text-red-600 text-sm">{error}</p>
+      <button
+        onClick={fetchProgress}
+        className="text-sm px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      >
+        Retry
+      </button>
+    </div>
+  )
   if (!data) return <div className="p-8 text-gray-500">No data yet — submit your first attempt.</div>
+
+  // Empty state: user has no activity yet
+  if (data.recentAttempts.length === 0 && data.todaysPlan.length === 0) {
+    return (
+      <div className="max-w-6xl mx-auto p-6">
+        <h1 className="text-2xl font-bold text-gray-900">Progress Tracker</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Your home base for daily prep.</p>
+        <div className="mt-16 text-center space-y-4">
+          <div className="text-4xl">📋</div>
+          <h2 className="text-lg font-semibold text-gray-900">No activity yet</h2>
+          <p className="text-sm text-gray-500 max-w-md mx-auto">
+            Submit your first attempt on the Problems page to see your progress,
+            weak areas, and personalized plan.
+          </p>
+          <Link
+            to="/problems"
+            className="inline-block px-5 py-2.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            Go to Problems
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-8">
       <header className="flex items-end justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Progress Tracker</h1>
-          <p className="text-gray-600 mt-1">Your home base for daily prep.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Progress Tracker</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Your home base for daily prep.</p>
         </div>
         <StreakBadge days={data.streakDays} />
       </header>
@@ -100,7 +159,12 @@ function TodaysPlanSection({ items }: { items: PlanItem[] }) {
                 {i + 1}
               </span>
               <div className="flex-1">
-                <div className="font-medium text-gray-900">{p.title}</div>
+                <Link
+                  to={`/problems?expand=${p.problemId}`}
+                  className="font-medium text-gray-900 hover:text-indigo-600 transition-colors"
+                >
+                  {p.title}
+                </Link>
                 <div className="text-sm text-gray-600">{p.reason}</div>
               </div>
             </li>
@@ -159,9 +223,12 @@ function WeakAreasSection({ weakAreas }: { weakAreas: WeakAreaRecord[] }) {
               className="flex items-center justify-between gap-3 border-b border-gray-100 pb-2 last:border-0"
             >
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-gray-900 truncate">
+                <Link
+                  to={`/roadmap?highlight=${w.topic?.id ?? ''}`}
+                  className="font-medium text-gray-900 hover:text-indigo-600 transition-colors truncate block"
+                >
                   {w.topic?.name ?? w.pattern?.name ?? 'Unknown'}
-                </div>
+                </Link>
                 <div className="text-xs text-gray-500 mt-0.5 capitalize">{w.reason}</div>
               </div>
               <SeverityBadge severity={w.severity} />
