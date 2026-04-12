@@ -26,7 +26,7 @@ const VALID_STATUSES = new Set(['solved', 'attempted', 'failed'])
 router.post('/', protect, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const clerkId = getUserId(req)
-    const { problemId, status, solveTime, hintsUsed, approachText } = req.body ?? {}
+    const { problemId, status, solveTime, hintsUsed, approachText, language, codeSubmission } = req.body ?? {}
 
     if (!problemId || typeof problemId !== 'string') {
       return res.status(400).json({ error: 'problemId (string) required' })
@@ -37,10 +37,12 @@ router.post('/', protect, async (req: Request, res: Response, next: NextFunction
     if (typeof solveTime !== 'number' || solveTime < 0) {
       return res.status(400).json({ error: 'solveTime (number, minutes) required' })
     }
-    if (!approachText || typeof approachText !== 'string' || approachText.trim().length < 10) {
+    const hasApproach = typeof approachText === 'string' && approachText.trim().length >= 10
+    const hasCode = typeof codeSubmission === 'string' && codeSubmission.trim().length > 0
+    if (!hasApproach && !hasCode) {
       return res
         .status(400)
-        .json({ error: 'approachText (min 10 chars) required — describe your approach' })
+        .json({ error: 'Provide either a written approach (min 10 chars) or a code submission' })
     }
 
     // Resolve user
@@ -62,7 +64,9 @@ router.post('/', protect, async (req: Request, res: Response, next: NextFunction
       difficulty: problem.difficulty,
       expectedPattern: problem.pattern.name,
       topic: problem.topic.name,
-      approachText,
+      approachText: approachText ?? '',
+      language: typeof language === 'string' ? language : undefined,
+      codeSubmission: typeof codeSubmission === 'string' ? codeSubmission.trim() : undefined,
     })
 
     // Resolve the AI-identified pattern to a Pattern row. If it doesn't match
@@ -93,7 +97,9 @@ router.post('/', protect, async (req: Request, res: Response, next: NextFunction
       const submission = await tx.attemptSubmission.create({
         data: {
           attemptId: attempt.id,
-          approachText,
+          approachText: approachText ?? '',
+          language: typeof language === 'string' ? language : null,
+          codeSubmission: typeof codeSubmission === 'string' ? codeSubmission.trim() : null,
           aiScore,
           timeComplexity: evaluation.timeComplexity,
           spaceComplexity: evaluation.spaceComplexity,

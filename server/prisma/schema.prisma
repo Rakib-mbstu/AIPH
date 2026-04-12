@@ -153,6 +153,8 @@ model AttemptSubmission {
   id                 String   @id @default(cuid())
   attemptId          String   @unique
   approachText       String   @db.Text
+  language           String?  // e.g. python, javascript, java, cpp
+  codeSubmission     String?  @db.Text
   aiScore            Int?     // 0-100
   timeComplexity     String?  // O(n)
   spaceComplexity    String?  // O(n)
