@@ -4,6 +4,7 @@ import { protect, getUserId } from '../middleware/auth'
 import { getOrCreateUser } from '../lib/db/queries/users'
 import { upsertMasteryInTx } from '../lib/db/queries/mastery'
 import { evaluateApproach } from '../lib/ai/client'
+import { invalidateUserCache } from '../lib/ai/cache'
 import { detectWeakness } from '../lib/weakness/detect'
 import { prisma } from '../index'
 
@@ -121,9 +122,13 @@ router.post('/', protect, async (req: Request, res: Response, next: NextFunction
       return { attempt, submission }
     })
 
-    // Fire-and-forget weakness detection — never block the response
+    // Fire-and-forget: weakness detection + recommendation cache invalidation.
+    // A new attempt changes mastery/weak-areas, so cached recommendations are stale.
     detectWeakness(user.id, problem.topicId, patternForMastery.id).catch((err) => {
       console.error('[attempts] detectWeakness failed:', err)
+    })
+    invalidateUserCache(user.id).catch((err) => {
+      console.error('[attempts] invalidateUserCache failed:', err)
     })
 
     res.json(result)

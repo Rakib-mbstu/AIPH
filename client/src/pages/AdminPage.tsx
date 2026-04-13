@@ -9,6 +9,7 @@ const STATUS_STYLES: Record<string, string> = {
   fallback_success: 'bg-yellow-100 text-yellow-800',
   error:            'bg-red-100 text-red-800',
   fallback_error:   'bg-red-200 text-red-900',
+  cache_hit:        'bg-cyan-100 text-cyan-800',
 }
 
 const USE_CASE_COLORS: Record<string, string> = {
@@ -61,7 +62,8 @@ function StatCard({
 // ─── Mini latency bar chart (last 40 calls) ───────────────────────────────────
 
 function LatencyChart({ logs }: { logs: AiCallRecord[] }) {
-  const recent = [...logs].reverse().slice(0, 40)
+  // Exclude cache hits — their 0 ms latency would collapse the scale
+  const recent = [...logs].reverse().filter((r) => !r.cacheHit).slice(0, 40)
   if (recent.length === 0) return null
   const max = Math.max(...recent.map((r) => r.latencyMs), 1)
 
@@ -179,7 +181,9 @@ function LogRow({ r }: { r: AiCallRecord }) {
           />
         </td>
         <td className="px-3 py-2 text-xs text-gray-600 max-w-[160px] truncate" title={r.model}>
-          {r.model.replace('openai/', '').replace('anthropic/', '')}
+          {r.cacheHit
+            ? <span className="text-cyan-600 font-semibold">cache</span>
+            : r.model.replace('openai/', '').replace('anthropic/', '')}
           {r.wasFallback && <span className="ml-1 text-yellow-600 font-semibold">↩fb</span>}
         </td>
         <td className="px-3 py-2">
@@ -351,8 +355,13 @@ export default function AdminPage() {
       {stats && stats.total > 0 && (
         <div className="mb-8 space-y-4">
           {/* Top stat cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <StatCard label="Total calls" value={stats.total} />
+            <StatCard
+              label="Cache hits"
+              value={stats.cacheHits ?? 0}
+              sub={`${stats.total ? Math.round(((stats.cacheHits ?? 0) / stats.total) * 100) : 0}% hit rate`}
+            />
             <StatCard
               label="Fallbacks"
               value={stats.fallbacks ?? 0}
@@ -367,6 +376,7 @@ export default function AdminPage() {
             <StatCard
               label="Avg latency"
               value={stats.avgLatencyMs ? `${stats.avgLatencyMs.toLocaleString()} ms` : '—'}
+              sub="live calls only"
             />
           </div>
 

@@ -155,7 +155,7 @@ export async function recommendForUser(
       patternMastery,
       recentProblems: recentTitles,
       problemPool: pool,
-    })
+    }, userId)
 
     // Map AI output back to full Problem rows. Drop anything the model
     // hallucinated that isn't in our pool.
