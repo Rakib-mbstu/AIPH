@@ -9,6 +9,7 @@ import TrackerPage from './pages/TrackerPage'
 import ProblemsPage from './pages/ProblemsPage'
 import ChatPage from './pages/ChatPage'
 import AdminPage from './pages/AdminPage'
+import SystemDesignPage from './pages/SystemDesignPage'
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -75,6 +76,14 @@ function App() {
           element={
             <ProtectedLayout>
               <ProblemsPage />
+            </ProtectedLayout>
+          }
+        />
+        <Route
+          path="/system-design"
+          element={
+            <ProtectedLayout>
+              <SystemDesignPage />
             </ProtectedLayout>
           }
         />

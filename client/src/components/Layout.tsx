@@ -3,10 +3,11 @@ import { UserButton } from '@clerk/clerk-react'
 import { track } from '../lib/analytics'
 
 const NAV_ITEMS = [
-  { to: '/roadmap',  label: 'Roadmap',  icon: '🗺️' },
-  { to: '/problems', label: 'Problems', icon: '📋' },
-  { to: '/tracker',  label: 'Tracker',  icon: '📊' },
-  { to: '/chat',     label: 'Chat',     icon: '💬' },
+  { to: '/roadmap',        label: 'Roadmap',        icon: '🗺️' },
+  { to: '/problems',       label: 'Problems',       icon: '📋' },
+  { to: '/system-design',  label: 'System Design',  icon: '🏗️' },
+  { to: '/tracker',        label: 'Tracker',        icon: '📊' },
+  { to: '/chat',           label: 'Chat',           icon: '💬' },
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {

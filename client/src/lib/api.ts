@@ -13,6 +13,20 @@ export interface ChatMessageRecord {
   createdAt: string;
 }
 
+export interface ChatSessionRecord {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  preview: string | null;
+}
+
+export interface SessionDetail {
+  session: Omit<ChatSessionRecord, 'messageCount' | 'preview'>;
+  messages: ChatMessageRecord[];
+}
+
 export interface TopicProgress {
   id: string;
   masteryScore: number;
@@ -173,13 +187,74 @@ export interface AttemptResult {
 
 export type ChatTurn = { role: 'user' | 'assistant'; content: string }
 
+// ── System Design ──────────────────────────────────────────────────────────
+
+export interface SystemDesignTopic {
+  id: string
+  name: string
+  category: string
+  description: string
+  difficulty: string
+  prerequisiteIds: string[]
+}
+
+export interface SystemDesignProgress {
+  id: string
+  masteryScore: number
+  attemptCount: number
+  lastReviewed: string
+}
+
+export interface SystemDesignTopicWithProgress extends SystemDesignTopic {
+  progress: SystemDesignProgress | null
+}
+
+export interface SystemDesignResource {
+  title: string
+  url: string
+  type: string  // 'article' | 'video' | 'docs'
+}
+
+export interface SystemDesignQuestion {
+  id: string
+  prompt: string
+  difficulty: string
+  expectedConcepts: string[]
+  resources: SystemDesignResource[]
+  topics: SystemDesignTopic[]
+  attemptCount: number
+}
+
+export interface SystemDesignAttemptResult {
+  id: string
+  score: number
+  requirementsClarification: number
+  componentCoverage: number
+  scalabilityReasoning: number
+  tradeoffAwareness: number
+  feedback: string
+  missingConcepts: string[]
+  suggestedDeepDive: string | null
+}
+
+export interface SystemDesignAttemptPayload {
+  questionId: string
+  responseText: string
+}
+
+export interface SystemDesignAttemptResponse {
+  attempt: { id: string; createdAt: string }
+  result: SystemDesignAttemptResult
+}
+
 export interface AiCallRecord {
   id: number
   ts: string
   useCase: string
   model: string
   wasFallback: boolean
-  status: 'success' | 'error' | 'fallback_success' | 'fallback_error'
+  cacheHit?: true
+  status: 'success' | 'error' | 'fallback_success' | 'fallback_error' | 'cache_hit'
   latencyMs: number
   promptPreview: string
   responsePreview: string
@@ -189,6 +264,7 @@ export interface AiCallRecord {
 
 export interface AiStats {
   total: number
+  cacheHits?: number
   fallbacks?: number
   errors?: number
   avgLatencyMs?: number
@@ -200,12 +276,18 @@ export interface AiStats {
  * Stream a chat completion from the server. Yields token deltas as they
  * arrive over SSE. Caller is responsible for accumulating into UI state and
  * handling AbortController for cancellation.
+ *
+ * `sessionId` is required — every message belongs to a session.
+ * `onSessionTitle` is called once (on the first message of a session) with
+ * the AI-generated title so the history dropdown can update without a re-fetch.
  */
 export async function* streamChat(opts: {
   token: string;
   message: string;
+  sessionId: string;
   history?: ChatTurn[];
   signal?: AbortSignal;
+  onSessionTitle?: (title: string) => void;
 }): AsyncGenerator<string> {
   const res = await fetch(`${API_URL}/api/chat`, {
     method: 'POST',
@@ -213,7 +295,11 @@ export async function* streamChat(opts: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${opts.token}`,
     },
-    body: JSON.stringify({ message: opts.message, history: opts.history ?? [] }),
+    body: JSON.stringify({
+      message: opts.message,
+      sessionId: opts.sessionId,
+      history: opts.history ?? [],
+    }),
     signal: opts.signal,
   });
 
@@ -236,15 +322,14 @@ export async function* streamChat(opts: {
     while ((sep = buf.indexOf('\n\n')) !== -1) {
       const frame = buf.slice(0, sep);
       buf = buf.slice(sep + 2);
-      const dataLine = frame
-        .split('\n')
-        .find((l) => l.startsWith('data:'));
+      const dataLine = frame.split('\n').find((l) => l.startsWith('data:'));
       if (!dataLine) continue;
       const payload = dataLine.slice(5).trim();
       if (!payload) continue;
       try {
         const obj = JSON.parse(payload);
         if (obj.delta) yield obj.delta as string;
+        if (obj.sessionTitle) opts.onSessionTitle?.(obj.sessionTitle as string);
         if (obj.done) return;
         if (obj.error) throw new Error(obj.message || obj.error);
       } catch (err) {
@@ -308,7 +393,15 @@ export const api = {
     }),
   me: (token: string) => apiCall<{ user: any }>('/users/me', { token }),
 
-  // Chat history
+  // Chat sessions
+  createSession: (token: string) =>
+    apiCall<{ session: ChatSessionRecord }>('/chat/sessions', { method: 'POST', token }),
+  listSessions: (token: string, limit = 50) =>
+    apiCall<{ sessions: ChatSessionRecord[] }>(`/chat/sessions?limit=${limit}`, { token }),
+  getSession: (token: string, sessionId: string) =>
+    apiCall<SessionDetail>(`/chat/sessions/${sessionId}`, { token }),
+
+  // Chat history (backward compat)
   chatHistory: (token: string, limit = 50) =>
     apiCall<{ messages: ChatMessageRecord[] }>(`/chat/history?limit=${limit}`, { token }),
 
@@ -350,6 +443,20 @@ export const api = {
   // Readiness
   getReadiness: (token: string) =>
     apiCall<ReadinessResult>('/readiness', { token }),
+
+  // System Design
+  getSystemDesignQuestions: (token: string) =>
+    apiCall<{ questions: SystemDesignQuestion[] }>('/system-design/questions', { token }),
+  getSystemDesignTopics: (token: string) =>
+    apiCall<{ topics: SystemDesignTopicWithProgress[] }>('/system-design/topics', { token }),
+  submitSystemDesignAttempt: (token: string, payload: SystemDesignAttemptPayload) =>
+    apiCall<SystemDesignAttemptResponse>('/system-design/attempts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      token,
+    }),
+  getSystemDesignAttemptHistory: (token: string, questionId: string) =>
+    apiCall<{ attempts: any[] }>(`/system-design/attempts/${questionId}`, { token }),
 
   // Admin — AI call monitor (no Clerk token needed; uses ADMIN_KEY header)
   getAiLogs: (limit = 100, adminKey?: string) =>
