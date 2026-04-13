@@ -35,6 +35,7 @@
 | **Bug fix**. `POST /api/chat` registered at `/kkkkkk` — chat 404'd silently | ✅ Fixed |
 | **Bug fix**. Stale token on attempt submit; `apiCall` HTML-response guard | ✅ Fixed |
 | **AI Monitor**. In-memory call logger, admin dashboard, `GET/DELETE /api/admin/ai-logs` | ✅ Complete |
+| **Cycle R**. Response caching (Redis-ready), prompt caching, chat UI redesign, chat sessions + AI-generated titles | ✅ Complete |
 
 ---
 
@@ -233,6 +234,8 @@ PORT=4000
 | 3 | Pattern tracking surface, readiness score, PostHog analytics | ✅ Complete (Cycles C + E + F) |
 | 3.5 | App shell, Problems page + attempt UI, Chat page, auth smoke test | ✅ Complete (Cycles G + H + I + J) |
 | 4 | UX polish, cross-page linking, skeletons, public homepage, AI call monitor | ✅ Complete (Cycles K + L + M + Q) |
+| 4.5 | Response caching (Redis-ready, user-scoped invalidation), provider-level prompt caching, chat UI redesign (modern input, code copy), chat sessions with history and AI-generated titles | ✅ Complete (Cycle R) |
+| 4.6 | System design preparation — topics, questions, AI evaluation, progress tracking, readiness score unlock, chat context integration | Planned (Cycles S1–S4) |
 | 5 | Testing infrastructure (unit, integration, prompt regression) | Planned (Cycles N + O) |
 | 6 | Deployment (Docker, CI/CD, production config) | Planned (Cycle P) |
 | 7 | Mock interview mode, voice, exportable reports | Out of scope (for now) |
@@ -970,6 +973,340 @@ Toasts are inline divs that auto-dismiss.
 
 ---
 
+## Phase 4.6 — System Design Preparation (Cycles S1–S4)
+
+System design is one of the five readiness score components (weight 0.15) and is currently `unscored: true`. This phase builds the full preparation loop: topic content, practice questions, AI evaluation, progress tracking, weakness detection, and readiness score unlock.
+
+### Cycle S1 — Schema, migrations, seed data
+
+**Goal:** Land all new Prisma models, run the migration, and populate seed data so S2 can query real rows.
+
+**New files:**
+
+`/data/system-design-topics.json` — 15 topic objects:
+```json
+{ "name": string, "category": string, "description": string, "difficulty": "beginner"|"intermediate"|"advanced", "prerequisiteNames": string[] }
+```
+
+Topics: Load Balancing, Caching (Redis / Memcached), Database Sharding, Message Queues (Kafka / RabbitMQ), Rate Limiting, Consistent Hashing, CAP Theorem, CDNs, API Design (REST / GraphQL), SQL vs NoSQL Trade-offs, Database Replication, Service Discovery, Distributed Caching, Event-Driven Architecture, Microservices vs Monolith.
+
+`/data/system-design-questions.json` — 10 question objects:
+```json
+{ "prompt": string, "difficulty": "easy"|"medium"|"hard", "expectedConcepts": string[], "topicNames": string[] }
+```
+
+Questions: URL Shortener (easy), Twitter Feed (medium), Netflix / Video Streaming (hard), Chat Application (medium), Uber / Ride Share (hard), Rate Limiter (easy), Search Autocomplete (medium), Pastebin (easy), Notification System (medium), Google Drive / Dropbox (hard).
+
+**Schema additions** (`server/prisma/schema.prisma`):
+
+Add back-relations on `User`:
+```prisma
+systemDesignAttempts  SystemDesignAttempt[]
+systemDesignProgress  SystemDesignProgress[]
+```
+
+Add to `WeakArea` model (do this in S1 to avoid a second migration — S2 writes to this field):
+```prisma
+systemDesignTopicId  String?
+@@index([systemDesignTopicId])
+```
+
+Append five new models:
+```prisma
+model SystemDesignTopic {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  category        String
+  description     String   @db.Text
+  difficulty      String   // beginner | intermediate | advanced
+  prerequisiteIds String[] @default([])
+  createdAt       DateTime @default(now())
+
+  questions SystemDesignQuestionTopic[]
+  progress  SystemDesignProgress[]
+}
+
+model SystemDesignQuestion {
+  id               String   @id @default(cuid())
+  prompt           String   @db.Text
+  difficulty       String   // easy | medium | hard
+  expectedConcepts String[]
+  createdAt        DateTime @default(now())
+
+  topics   SystemDesignQuestionTopic[]
+  attempts SystemDesignAttempt[]
+}
+
+// Explicit join table — needed for "questions by topic" queries
+model SystemDesignQuestionTopic {
+  questionId String
+  topicId    String
+
+  question SystemDesignQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  topic    SystemDesignTopic    @relation(fields: [topicId],    references: [id], onDelete: Cascade)
+
+  @@id([questionId, topicId])
+  @@index([topicId])
+}
+
+model SystemDesignAttempt {
+  id           String   @id @default(cuid())
+  userId       String
+  questionId   String
+  responseText String   @db.Text
+  createdAt    DateTime @default(now())
+
+  user     User                       @relation(fields: [userId],     references: [id], onDelete: Cascade)
+  question SystemDesignQuestion       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  result   SystemDesignAttemptResult?
+
+  @@index([userId])
+  @@index([questionId])
+  @@index([userId, createdAt])
+}
+
+model SystemDesignAttemptResult {
+  id                        String   @id @default(cuid())
+  attemptId                 String   @unique
+  score                     Int      // 0-100
+  requirementsClarification Int      // 0-25
+  componentCoverage         Int      // 0-25
+  scalabilityReasoning      Int      // 0-25
+  tradeoffAwareness         Int      // 0-25
+  feedback                  String   @db.Text
+  missingConcepts           String[]
+  suggestedDeepDive         String?
+  createdAt                 DateTime @default(now())
+
+  attempt SystemDesignAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+}
+
+model SystemDesignProgress {
+  id           String   @id @default(cuid())
+  userId       String
+  topicId      String
+  masteryScore Int      @default(0)
+  attemptCount Int      @default(0)
+  lastReviewed DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user  User              @relation(fields: [userId],  references: [id], onDelete: Cascade)
+  topic SystemDesignTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@index([userId])
+  @@index([topicId])
+}
+```
+
+**Seeder additions** (`server/prisma/seed.ts`):
+
+Add two seeding blocks in `main()` after existing DSA seeding:
+1. Read `system-design-topics.json` → upsert on `name` → second pass to resolve `prerequisiteNames` to IDs and write `prerequisiteIds`.
+2. Read `system-design-questions.json` → for each: findFirst on `prompt`, create or update → resolve `topicNames` to IDs → delete+recreate `SystemDesignQuestionTopic` join rows (idempotent).
+
+**Commands:**
+```bash
+cd server && npx prisma migrate dev --name add_system_design
+npm run seed
+```
+
+---
+
+### Cycle S2 — AI evaluator + backend routes
+
+**Goal:** Wire the AI evaluator and expose all four backend endpoints.
+
+**New files:**
+
+`server/src/lib/ai/prompts/system-design-evaluation.md`:
+```markdown
+<!-- version: 1.0 | updated: 2026-04-13 | tested: no -->
+Evaluate a system design response across four dimensions (25 pts each).
+Return JSON only — no prose outside the JSON block.
+
+Dimensions:
+1. requirementsClarification — scale estimation, functional + non-functional requirements
+2. componentCoverage         — key components identified and their responsibilities
+3. scalabilityReasoning      — partitioning, replication, caching, load balancing addressed
+4. tradeoffAwareness         — consistency vs availability, latency vs throughput discussed
+
+Output:
+{
+  "score": 0-100,
+  "requirementsClarification": 0-25,
+  "componentCoverage": 0-25,
+  "scalabilityReasoning": 0-25,
+  "tradeoffAwareness": 0-25,
+  "feedback": "2-4 sentence constructive summary",
+  "missingConcepts": ["..."],
+  "suggestedDeepDive": "one specific topic"
+}
+```
+
+`server/src/lib/db/queries/systemDesignMastery.ts`:
+- `upsertSystemDesignProgressInTx(tx, { userId, topicIds, score })` — imports `blendScore` from `./mastery`, fans out EMA update across all topics linked to the question via `Promise.all` inside the transaction.
+
+`server/src/lib/weakness/detectSystemDesign.ts`:
+- `detectSystemDesignWeakness(userId, topicIds)` — for each topic, fetch last 10 attempts with results. Flag `failing` when `failureRate > 0.4 AND n > 3` (score < 40 = failure). Writes `WeakArea.systemDesignTopicId`. Calls existing `flag()` dedup logic.
+
+`server/src/routes/system-design.ts`:
+```
+POST /api/system-design/attempts       submit + evaluate + update progress
+GET  /api/system-design/questions      all questions with topic join + user attempt count
+GET  /api/system-design/topics         all topics with user progress left-joined
+GET  /api/system-design/attempts/:questionId
+```
+
+`POST /api/system-design/attempts` flow (mirrors `POST /api/attempts`):
+1. Validate: `questionId` (string), `responseText` (string, min 50 chars)
+2. Resolve user via `getOrCreateUser`
+3. Fetch question with topic join
+4. `evaluateSystemDesign({ prompt, expectedConcepts, responseText })`
+5. Transaction: create `SystemDesignAttempt` → create `SystemDesignAttemptResult` → `upsertSystemDesignProgressInTx`
+6. Fire-and-forget: `detectSystemDesignWeakness(userId, topicIds)` + `invalidateUserCache(userId)`
+7. Return `{ attempt, result }`
+
+**Modified files:**
+
+`server/src/lib/ai/client.ts`:
+- Add `systemDesignEvaluation` to `MODELS` (primary + fallback: `openai/gpt-4o-mini`)
+- Add `systemDesignEvaluation: 7 * 24 * 60 * 60 * 1000` to `CACHE_TTL_MS`
+- Add `SystemDesignEvaluationInput` + `SystemDesignEvaluationResult` interfaces
+- Add `evaluateSystemDesign(input)` — calls `renderPrompt('system-design-evaluation', ...)` + `completeJson<SystemDesignEvaluationResult>('systemDesignEvaluation', ...)` with `maxTokens: 800`. No `userId` arg (content-addressed caching works because same question text always scores the same)
+
+`server/src/index.ts`:
+```typescript
+import systemDesignRoutes from './routes/system-design'
+app.use('/api/system-design', systemDesignRoutes)
+```
+
+**Type-check:** `cd server && npx tsc --noEmit`
+
+---
+
+### Cycle S3 — Readiness score unlock + chat context
+
+**Goal:** Remove `unscored: true` from the system design readiness component and surface system design weak areas in the AI chat.
+
+**Modified files:**
+
+`server/src/lib/readiness/score.ts`:
+- Add SD queries to the `Promise.all`: `systemDesignProgress.findMany({ where: { userId } })` + `systemDesignQuestion.count()`
+- Add `computeSystemDesign(sdProgress, sdAttemptCount, totalQuestions)`:
+  ```
+  score = mean(masteryScore) * 0.6 + min(sdAttemptCount / totalQuestions, 1) * 100 * 0.4
+  ```
+  `sdAttemptCount` = count of progress rows where `attemptCount > 0`
+- Replace `unscored: true` stub with real result. New detail: `"${attempted}/${totalQuestions} questions attempted"`
+
+`server/src/lib/db/queries/chatContext.ts`:
+- Add to `Promise.all`:
+  - Unresolved `WeakArea` rows where `systemDesignTopicId IS NOT NULL` (top 3 by severity)
+  - Last 3 `SystemDesignAttempt` rows with question prompt
+- Resolve topic names via a `SystemDesignTopic` lookup
+- Map to `systemDesignWeakAreas: string[]` and `recentSystemDesignAttempts: string[]`
+
+`server/src/lib/ai/client.ts` — extend `ChatContext` interface:
+```typescript
+systemDesignWeakAreas?: string[]
+recentSystemDesignAttempts?: string[]
+```
+
+`server/src/lib/ai/prompts/chat.md` — add in context block:
+```
+System design weak areas: {{ systemDesignWeakAreas }}
+Recent system design attempts: {{ recentSystemDesignAttempts }}
+```
+
+No route changes. Chat is automatically system-design-aware after S3.
+
+---
+
+### Cycle S4 — Frontend
+
+**Goal:** Build the System Design page and wire navigation.
+
+**New files:**
+
+`client/src/components/system-design/QuestionCard.tsx`
+- Props: `question`, `isActive`, `onSelect`
+- Difficulty badge (reuse existing badge classes), attempt count chip, prompt truncated to 2 lines, expected concept chips (up to 4, then "+N more")
+
+`client/src/components/system-design/TopicProgressCard.tsx`
+- Props: `topic` with nested `progress | null`
+- Category badge, mastery score bar, attempt count, "Not started" gray state
+
+`client/src/components/system-design/AttemptModal.tsx`
+- 4 collapsible `<details>` hints: "Clarify Requirements", "Identify Components", "Address Scalability", "Discuss Trade-offs"
+- Free-text `<textarea>` (min 50 chars, character counter)
+- Submit with `idle | evaluating | done` phases + spinner (same pattern as `AttemptForm`)
+- Calls `api.submitSystemDesignAttempt`, transitions to `ResultPanel` on success
+
+`client/src/components/system-design/ResultPanel.tsx`
+- Overall score (≥80 emerald, ≥50 indigo, else amber — same thresholds as DSA evaluation)
+- Four sub-score progress bars (value / 25)
+- Feedback paragraph
+- Missing concept chips
+- `suggestedDeepDive` box with "Learn more" link → `/chat?topic=<encoded>`
+- "Done" button
+
+`client/src/pages/SystemDesignPage.tsx`
+- Parallel fetch of questions + topics on mount
+- Two-column desktop layout: question list left, attempt/result panel right
+- Single column on mobile
+
+**Modified files:**
+
+`client/src/lib/api.ts` — add types + methods:
+```typescript
+// Types
+SystemDesignTopic, SystemDesignProgress, SystemDesignTopicWithProgress
+SystemDesignQuestion, SystemDesignAttemptResult
+SystemDesignAttemptPayload, SystemDesignAttemptResponse
+
+// api methods
+api.getSystemDesignTopics(token)
+api.getSystemDesignQuestions(token)
+api.submitSystemDesignAttempt(token, payload)
+api.getSystemDesignAttemptHistory(token, questionId)
+```
+
+`client/src/App.tsx` — add protected route:
+```tsx
+<Route path="/system-design" element={<ProtectedLayout><SystemDesignPage /></ProtectedLayout>} />
+```
+
+`client/src/components/Layout.tsx` — add to `NAV_ITEMS`:
+```typescript
+{ to: '/system-design', label: 'System Design', icon: '🏗️' }
+```
+
+**Smoke test checklist:**
+- [ ] Navigate to `/system-design` — questions load
+- [ ] Click a question — modal opens with guidance hints
+- [ ] Submit a short response → validation error (min 50 chars)
+- [ ] Submit a full response → evaluation runs → result panel shows score + sub-scores
+- [ ] Check `/tracker` — readiness score system design component shows a real number
+- [ ] Open `/chat` — ask "explain consistent hashing" — context includes SD weak areas
+
+---
+
+### Cross-cycle implementation notes
+
+| Note | Detail |
+|---|---|
+| `WeakArea.systemDesignTopicId` must be in S1 migration | S2 writes to it; adding it later requires a second migration |
+| `blendScore` already exported from `mastery.ts` | Import directly in `systemDesignMastery.ts` — no changes to `mastery.ts` |
+| `evaluateSystemDesign` takes no `userId` | Same response text always produces same score — content-addressed cache works correctly |
+| Mobile nav with 5 items | Each item drops from 25% to 20% width — verify at 375px viewport |
+| "Learn more" → `/chat?topic=...` | Zero new infrastructure; existing chat page reads `topic` query param on mount |
+
+---
+
 ## Phase 5 — Testing Infrastructure (Cycles N–O)
 
 ### Cycle N — Unit Tests
@@ -1021,6 +1358,68 @@ Not scoped in detail yet. High-level:
 - **Environment:** Production `.env` with real keys, `NODE_ENV=production`,
   Prisma migrations applied via release command
 - **Monitoring:** Error tracking (Sentry or similar), AI fallback rate dashboard
+
+---
+
+## Phase 4.5 — Cycle R (Complete)
+
+### Goals
+1. Add response caching for all deterministic AI calls — Redis-ready with user-scoped invalidation
+2. Provider-level prompt caching for Claude streaming calls via `cache_control`
+3. Chat UI redesign — modern floating input box, new chat button, code block copy
+4. Persistent chat sessions — history, session switching, AI-generated titles via SSE frame
+
+---
+
+### R1 — Response Cache (`server/src/lib/ai/cache.ts`)
+
+New file. `AiCacheBackend` interface: `get / set / del`. Default `InMemoryCache` uses a `Map<string, { value, expiresAt }>`. To swap to Redis: replace the singleton assignment in `cache.ts` — no other code changes.
+
+Cache key: SHA-256 of `useCase + '\x00' + systemPrompt + '\x00' + userPrompt`. Content-addressed so the same inputs always hit regardless of user.
+
+TTLs: `evaluation` 7 days, `roadmap` 24h, `recommendation` 2h. Chat excluded.
+
+User-scoped invalidation: secondary `Map<userId, Set<cacheKey>>` index. `tagUserKey(userId, key)` called on cache write. `invalidateUserCache(userId)` called fire-and-forget in `POST /api/attempts` after a successful submission — stale recommendation results are busted after each attempt.
+
+Cache hits recorded in the AI monitor as `status: 'cache_hit'`. Admin page: cyan "cache" badge, "Cache hits" stat card, cache hits excluded from avg latency chart.
+
+### R2 — Provider-Level Prompt Cache (`server/src/lib/ai/client.ts`)
+
+In `streamChat`, the system message is sent as a content block array with `cache_control: { type: "ephemeral" }` on Claude's primary model path. Forwarded through OpenRouter to Anthropic's KV cache. Not applied to the gpt-4o-mini fallback.
+
+### R3 — Chat UI Redesign (`client/src/pages/ChatPage.tsx`)
+
+- **Modern input box:** Floating card with rounded border, inner bottom bar containing the send button and character feedback. Expands on focus with a ring.
+- **New chat button:** Top-right of chat header, opens a fresh session.
+- **Code block copy:** `pre` component override in react-markdown v10 (no `inline` prop — detect block code by `pre` wrapper). Copy button top-right, checkmark feedback for 2s.
+
+### R4 — Chat Sessions
+
+**Schema** (`server/prisma/schema.prisma`):
+- New `ChatSession` model: `id`, `userId`, `title` (default "New chat"), `createdAt`, `updatedAt`. Indexed on `(userId)` and `(userId, updatedAt)`.
+- `ChatMessage.sessionId String?` nullable FK to `ChatSession`. Indexed on `(sessionId)` and `(sessionId, createdAt)`.
+- Migration: `20260413070323_add_chat_sessions`
+
+**Server queries** (`server/src/lib/db/queries/chatSessions.ts`):
+`createSession`, `listSessions` (single query with `_count` + last assistant message preview), `getSessionWithMessages`, `assertSessionOwner`, `setSessionTitleIfDefault`, `countUserMessages`, `touchSession`.
+
+**Server routes** (`server/src/routes/chat.ts`):
+- `POST /api/chat/sessions` — create
+- `GET /api/chat/sessions` — list with preview
+- `GET /api/chat/sessions/:sessionId` — full history
+- `POST /api/chat` updated: requires `sessionId`, asserts ownership, runs concurrent title generation, sends `sessionTitle` SSE frame before `done` frame on first exchange, calls `touchSession` fire-and-forget after stream.
+
+**AI title generation** (`server/src/lib/ai/client.ts`):
+`generateSessionTitle(userMessage)` — gpt-4o-mini, `max_tokens: 15`, `temperature: 0.3`. Prompt at `prompts/session-title.md`. Returns "New chat" on any failure — never throws. Runs concurrently with the stream, awaited after stream completes.
+
+**Client** (`client/src/hooks/useChat.ts`):
+Rewritten. New state: `sessions`, `activeSessionId`, `isLoadingSessions`, `isLoadingMessages`. On mount: fetches session list, auto-loads latest. `newChat()` creates server session. `loadSession()` fetches past session. `send()` creates session on demand if none active, passes `sessionId`, handles `onSessionTitle` callback to update local title, bumps session to top of list by sorting on `updatedAt` after stream.
+
+**Client components:**
+- `HistoryDropdown.tsx` — dropdown anchored below trigger, "New chat" button, scrollable `SessionItem` list, skeleton loading (3 items), outside-click + Escape to close.
+- `SessionItem.tsx` — title (truncated), preview (text-xs), relative timestamp, active state with indigo left border.
+
+**Dropdown trigger fix:** trigger button uses `onMouseDown={e => e.stopPropagation()}` to prevent the outside-click close handler from firing before the `click` toggle. One line — no ref needed.
 
 ---
 

@@ -1,6 +1,6 @@
 # Interview Prep AI — Technical Documentation
 
-> Engineering reference for the AIPH codebase. Pairs with [`CLAUDE.md`](../CLAUDE.md) (product vision) and [`plan.md`](../plan.md) (implementation log). This document describes the system **as it is built today** (Phase 4 complete — Cycles A through M + Q shipped).
+> Engineering reference for the AIPH codebase. Pairs with [`CLAUDE.md`](../CLAUDE.md) (product vision) and [`plan.md`](../plan.md) (implementation log). This document describes the system **as it is built today** (Phase 4.5 complete — Cycles A through M + Q + R shipped).
 
 ---
 
@@ -38,8 +38,9 @@ The **core invariant**: every meaningful user action (`POST /api/attempts`, `POS
 │   │   ├── pages/                HomePage.tsx (public landing), RoadmapPage.tsx, TrackerPage.tsx,
 │   │   │                         ProblemsPage.tsx, ChatPage.tsx, AdminPage.tsx (AI call monitor)
 │   │   ├── components/           Layout.tsx (sidebar + mobile nav), Skeleton.tsx, Sparkline.tsx
+│   │   │   └── chat/             HistoryDropdown.tsx (session picker), SessionItem.tsx
 │   │   ├── store/                Zustand stores (userStore.ts bridges Clerk → local user)
-│   │   ├── hooks/                useChat.ts (SSE), useTimer.ts
+│   │   ├── hooks/                useChat.ts (SSE + session management), useTimer.ts
 │   │   ├── lib/
 │   │   │   ├── api.ts            Typed fetch client; reads VITE_API_URL
 │   │   │   └── analytics.ts     PostHog wrapper (no-op without key)
@@ -53,7 +54,7 @@ The **core invariant**: every meaningful user action (`POST /api/attempts`, `POS
 │   │   ├── middleware/auth.ts    Clerk-aware route guard
 │   │   ├── routes/
 │   │   │   ├── users.ts          POST /api/users/onboard, GET /me
-│   │   │   ├── chat.ts           POST /api/chat (SSE), GET /history
+│   │   │   ├── chat.ts           POST /api/chat (SSE), POST/GET /sessions, GET /history (shim)
 │   │   │   ├── attempts.ts       POST /api/attempts, GET /:problemId
 │   │   │   ├── progress.ts       GET /api/progress (tracker bundle)
 │   │   │   ├── roadmap.ts        GET /api/roadmap, POST /generate (501)
@@ -63,17 +64,18 @@ The **core invariant**: every meaningful user action (`POST /api/attempts`, `POS
 │   │   │   └── admin.ts          GET /api/admin/ai-logs, GET /api/admin/ai-stats, DELETE /api/admin/ai-logs
 │   │   └── lib/
 │   │       ├── ai/
-│   │       │   ├── client.ts     OpenRouter abstraction + fallback + call instrumentation
-│   │       │   ├── logger.ts     In-memory circular buffer (200 records) for AI call monitoring
+│   │       │   ├── client.ts     OpenRouter abstraction + fallback + call instrumentation + response cache
+│   │       │   ├── cache.ts      Redis-ready response cache (InMemoryCache default, AiCacheBackend interface)
+│   │       │   ├── logger.ts     In-memory circular buffer (200 records) for AI call monitoring + cache hits
 │   │       │   ├── prompts.ts    Markdown prompt loader + templating
-│   │       │   └── prompts/      chat.md, evaluation.md, roadmap.md, recommendation.md, weakness.md
-│   │       ├── db/queries/       chatContext.ts, mastery.ts, streak.ts, users.ts, patterns.ts
+│   │       │   └── prompts/      chat.md, evaluation.md, roadmap.md, recommendation.md, weakness.md, session-title.md
+│   │       ├── db/queries/       chatContext.ts, chatSessions.ts, mastery.ts, streak.ts, users.ts, patterns.ts
 │   │       ├── roadmap/          graph.ts (topic graph loader + validator + status)
 │   │       ├── readiness/        score.ts (composite formula)
 │   │       ├── recommendation/   engine.ts (LLM ranker), todaysPlan.ts (deterministic fallback)
 │   │       └── weakness/         detect.ts (passive)
 │   └── prisma/
-│       ├── schema.prisma         11 normalized tables
+│       ├── schema.prisma         13 normalized tables (added ChatSession, updated ChatMessage)
 │       └── seed.ts               Idempotent topic/pattern/problem seeder
 │
 ├── data/                         Human-editable seed JSON (topics, patterns, problems, topicGraph)
@@ -109,7 +111,7 @@ A protected request travels this path:
 
 ## 4. Data Model
 
-11 tables, normalized so every entity has one home. Source of truth: [`server/prisma/schema.prisma`](../server/prisma/schema.prisma).
+13 tables, normalized so every entity has one home. Source of truth: [`server/prisma/schema.prisma`](../server/prisma/schema.prisma).
 
 ```
 User ──┬── UserProfile (1:1)
@@ -118,7 +120,9 @@ User ──┬── UserProfile (1:1)
        ├── Attempt (1:N) ───────── Problem ── Topic, Pattern
        │      └── AttemptSubmission (1:1)
        ├── WeakArea (1:N) ──────── Topic? / Pattern?
-       └── ChatMessage (1:N)
+       ├── ChatSession (1:N)
+       │      └── ChatMessage (1:N)
+       └── ChatMessage (1:N, legacy — sessionId nullable)
 ```
 
 ### Table responsibilities
@@ -135,7 +139,8 @@ User ──┬── UserProfile (1:1)
 | `Attempt` | One submission | Lean — 6 columns; AI evaluation lives in `AttemptSubmission` |
 | `AttemptSubmission` | Approach + AI result | `patternIdentified` = what the user *actually* used per the LLM |
 | `WeakArea` | Detected flags | `topicId` OR `patternId`, never both. `resolvedAt` preserves history |
-| `ChatMessage` | Conversation history | Plain text in Phase 1; pgvector embeddings deferred to Phase 2 |
+| `ChatSession` | Session container | `title` defaults to "New chat"; AI-generated title written after first exchange. Indexed on `(userId, updatedAt)` for fast sorted history |
+| `ChatMessage` | One message turn | `sessionId` is nullable (legacy rows without a session remain valid). Indexed on `(sessionId, createdAt)` for history fetch |
 
 ### Mastery scoring
 
@@ -172,6 +177,7 @@ Recovery: 3 solved-in-a-row on a topic/pattern sets `resolvedAt` instead of dele
 | `evaluation` | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
 | `roadmap` | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
 | `recommendation` | `openai/gpt-4o-mini` | `openai/gpt-4o-mini` |
+| `sessionTitle` | `openai/gpt-4o-mini` | returns "New chat" on any failure |
 
 ### Public surface
 
@@ -180,13 +186,36 @@ Recovery: 3 solved-in-a-row on a topic/pattern sets `resolvedAt` instead of dele
 | `streamChat(messages, context)` | Async generator yielding chat tokens | Falls back to a non-streaming call with the fallback model and yields the entire response as one chunk |
 | `evaluateApproach(input)` | Returns structured `EvaluationResult` JSON | `completeJson` retries once with the fallback model, logs the failure |
 | `generateRoadmap(input)` | Returns structured `RoadmapResult` JSON | Same fallback behavior |
-| `recommendProblems(input)` | Returns ranked `{problemId, reason}[]` | Same fallback behavior; caller also has a deterministic fallback |
+| `recommendProblems(input, userId?)` | Returns ranked `{problemId, reason}[]` | Same fallback behavior; caller also has a deterministic fallback. `userId` used for cache tagging |
+| `generateSessionTitle(userMessage)` | Returns 4–6 word title string (gpt-4o-mini, max_tokens 15) | Returns `"New chat"` on any error — never throws |
 
-`completeJson<T>()` is the internal helper for structured calls. Forces `response_format: json_object`, `temperature: 0`, and parses the response into `T`. Every call (success, fallback, error) is recorded into the in-memory logger in `logger.ts`.
+`completeJson<T>()` is the internal helper for structured calls. Forces `response_format: json_object`, `temperature: 0`, and parses the response into `T`. Before every call, `completeJson` checks the response cache by SHA-256 key. Every call (success, fallback, error, cache hit) is recorded into the in-memory logger in `logger.ts`.
+
+### Response caching
+
+[`server/src/lib/ai/cache.ts`](../server/src/lib/ai/cache.ts) provides content-addressed caching for deterministic JSON calls (`evaluateApproach`, `generateRoadmap`, `recommendProblems`). Chat is never cached — it must be live.
+
+**Cache key:** SHA-256 of `useCase + '\x00' + systemPrompt + '\x00' + userPrompt`. Same inputs always map to the same key regardless of which user sent them.
+
+**TTL per use case:**
+
+| Use case | TTL |
+|---|---|
+| `evaluation` | 7 days |
+| `roadmap` | 24 hours |
+| `recommendation` | 2 hours |
+
+**Backend abstraction:** `AiCacheBackend` interface with `get / set / del`. Default implementation is `InMemoryCache` (a `Map` with TTL timestamps). To swap to Redis: replace `new InMemoryCache()` with `new RedisCache(redisClient)` — no other code changes.
+
+**User-scoped invalidation:** A secondary `Map<userId, Set<cacheKey>>` index tracks which cache keys belong to a user. `invalidateUserCache(userId)` is called fire-and-forget in `POST /api/attempts` so stale recommendation results are never served after an attempt changes the user's profile.
+
+**Monitor visibility:** Cache hits are recorded in the AI call logger with `status: 'cache_hit'`, excluded from average latency calculations, and shown as a cyan "cache" badge in the Admin monitor.
+
+**Prompt caching (provider-level):** The system message in `streamChat` carries `cache_control: { type: "ephemeral" }` on Claude primary path calls (not the fallback). This is the Anthropic prompt cache hint forwarded through OpenRouter — the provider caches the compiled KV context so repeat system prompts are cheaper. This is separate from the application-level response cache above.
 
 ### AI call monitoring
 
-[`server/src/lib/ai/logger.ts`](../server/src/lib/ai/logger.ts) maintains a circular buffer of the last 200 AI calls. Each record captures: id, ISO timestamp, use-case, model, fallback flag, status (`success` | `fallback_success` | `error` | `fallback_error`), latency ms, prompt/response previews (300 chars), and approximate char counts.
+[`server/src/lib/ai/logger.ts`](../server/src/lib/ai/logger.ts) maintains a circular buffer of the last 200 AI calls. Each record captures: id, ISO timestamp, use-case, model, fallback flag, status (`success` | `fallback_success` | `error` | `fallback_error` | `cache_hit`), latency ms, prompt/response previews (300 chars), and approximate char counts. Cache hits are counted separately in `getAiStats()` and excluded from the average latency figure.
 
 Exposed read-only via [`server/src/routes/admin.ts`](../server/src/routes/admin.ts):
 
@@ -248,17 +277,33 @@ The single most important write path in the system. Source: [`server/src/routes/
 Source: [`server/src/routes/chat.ts`](../server/src/routes/chat.ts).
 
 ```
-1. Validate, resolve user, build ChatContext
-2. Persist user message BEFORE streaming  (survives mid-stream disconnects)
-3. Set SSE headers: text/event-stream, no-cache, keep-alive, X-Accel-Buffering: no
-4. Build [trimmed history (last 20)] + new user turn
-5. for await (chunk of streamChat(...)) → write `data: {"delta":"..."}\n\n`
-6. On stream end: write `data: {"done":true}\n\n`
-7. If response had any content, persist assembled assistant message
-8. res.end()
+1. Validate body: message + sessionId required
+2. Resolve user. Assert session ownership (assertSessionOwner).
+3. countUserMessages(sessionId) — detect first exchange
+4. If first message: start generateSessionTitle(message) Promise concurrently
+5. Persist user message BEFORE streaming  (survives mid-stream disconnects)
+6. Set SSE headers: text/event-stream, no-cache, keep-alive, X-Accel-Buffering: no
+7. Build [trimmed history (last 20)] + new user turn, buildChatContext
+8. for await (chunk of streamChat(...)) → write `data: {"delta":"..."}\n\n`
+9. If response had any content, persist assembled assistant message
+10. If first message: await title Promise → setSessionTitleIfDefault(title)
+    → write `data: {"sessionTitle":"..."}\n\n` frame BEFORE done frame
+11. Write `data: {"done":true}\n\n`
+12. touchSession(sessionId) fire-and-forget (bumps updatedAt for history sort)
+13. res.end()
 ```
 
+**Session routes** (also in `chat.ts`):
+
+- `POST /api/chat/sessions` — create a new session (title: "New chat")
+- `GET /api/chat/sessions` — list all user sessions, newest-first, with `messageCount` and 80-char `preview` of the last assistant message. Single Prisma query — no N+1.
+- `GET /api/chat/sessions/:sessionId` — full message history for one session
+
 **Why persist user message first.** If the stream dies mid-token, history still reflects what the user asked. The assistant message is only persisted when there's content to persist — partial empty assistants are not stored.
+
+**Why title before `done` frame.** The `streamChat` client generator returns as soon as it sees `done: true`. Sending `sessionTitle` first guarantees `onSessionTitle` fires before the generator exits, so the title lands in local state in the same tick.
+
+**Concurrent title generation.** `generateSessionTitle` is started before the stream begins. It runs in parallel with token delivery — only awaited after the stream completes. This means title generation adds zero latency to stream start.
 
 `buildChatContext` ([`db/queries/chatContext.ts`](../server/src/lib/db/queries/chatContext.ts)) keeps the LLM context compact on purpose: top 5 unresolved weak areas, top 10 pattern mastery scores, last 5 successful patterns. Context bloat hurts model attention more than it helps.
 
@@ -386,8 +431,11 @@ All routes are JSON unless noted. All `/api/*` routes require a Clerk session ex
 
 | Method | Route | Auth | Purpose |
 |---|---|---|---|
-| POST | `/api/chat` | ✓ | **SSE stream.** Body: `{ message: string, history?: ChatMessage[] }`. Response is `data: {"delta":"..."}` frames followed by `data: {"done":true}`. |
-| GET | `/api/chat/history?limit=N` | ✓ | Last N messages (max 200, default 50), oldest-first. |
+| POST | `/api/chat/sessions` | ✓ | Create a new session. Returns `{ session: { id, title, createdAt, updatedAt } }`. |
+| GET | `/api/chat/sessions` | ✓ | List all sessions for the user, newest-first. Returns `{ sessions: SessionSummary[] }` where each entry includes `id`, `title`, `createdAt`, `updatedAt`, `messageCount`, `preview` (80-char last assistant snippet). |
+| GET | `/api/chat/sessions/:sessionId` | ✓ | Full session with all messages in ascending order. Returns `{ session, messages }`. |
+| POST | `/api/chat` | ✓ | **SSE stream.** Body: `{ message: string, sessionId: string, history?: ChatTurn[] }`. Response frames: `data: {"delta":"..."}`, optionally `data: {"sessionTitle":"..."}` (first exchange only), then `data: {"done":true}`. |
+| GET | `/api/chat/history?limit=N` | ✓ | **Deprecated shim.** Returns last N messages from the most recent session. Kept for backward compatibility. |
 
 ### Attempts
 
@@ -478,7 +526,16 @@ After sign-in/sign-up, Clerk redirects to `/roadmap` (`afterSignInUrl` / `afterS
 
 ### Chat streaming on the client
 
-`useChat` (hook) calls `POST /api/chat` with `fetch`, reads the response as a `ReadableStream`, splits on `\n\n`, parses each `data:` frame, and appends `delta` tokens to the in-memory message. The `done: true` frame ends the stream.
+`useChat` ([`hooks/useChat.ts`](../client/src/hooks/useChat.ts)) manages both sessions and streaming:
+
+- **On mount:** fetches the session list and auto-loads the most recent session's messages.
+- **`newChat()`:** creates a server session, adds it to local state, clears messages.
+- **`loadSession(sessionId)`:** fetches full message history for a past session; no-op if already active.
+- **`send(text)`:** creates a session on demand if none exists (e.g. from quick-start chips), then calls `POST /api/chat` with `fetch`. Reads the response as a `ReadableStream`, splits on `\n\n`, parses each `data:` frame. `delta` tokens append to the in-progress message; a `sessionTitle` frame updates the local session title; `done: true` ends the generator. After the stream, bumps the active session to the top of the local list by sorting on `updatedAt`.
+
+**History UI.** `HistoryDropdown` ([`components/chat/HistoryDropdown.tsx`](../client/src/components/chat/HistoryDropdown.tsx)) renders a dropdown anchored below the "History" button. It shows a "New chat" action at the top followed by a scrollable `SessionItem` list. Outside-click (`mousedown`) and Escape close it. The trigger button uses `onMouseDown={e => e.stopPropagation()}` to prevent the close handler from firing before the toggle click — no ref needed.
+
+**Code block copy.** `ChatPage` overrides the `pre` component in `react-markdown` (v10). Block code is detected by the `pre` wrapper (no `inline` prop in v10). A copy button with checkmark feedback is rendered at the top-right of each pre block.
 
 ---
 
@@ -567,6 +624,11 @@ These are the choices that shape the rest of the codebase. Read them before prop
 | **Token freshness at submit time** | `AttemptForm` calls `getToken()` at the moment of submission, not at page load. Clerk automatically refreshes the session if needed. The cached token from page load is never used for writes. |
 | **`apiCall` non-JSON guard** | Before calling `response.json()`, `apiCall` checks `Content-Type`. Non-JSON responses (auth redirects, proxy errors, HTML error pages) surface as `"Server error (N) — unexpected response format"` instead of a raw `SyntaxError`. |
 | **In-memory AI call log** | `logger.ts` uses a fixed-size circular array (max 200). No DB write, no external service. Resets on server restart by design — this is an operational debugging tool, not audit storage. |
+| **Application-level response cache** (Cycle R) | SHA-256 content-addressed cache for deterministic JSON calls. `AiCacheBackend` interface lets you swap `InMemoryCache` for `RedisCache` in one line. Chat is explicitly excluded — it must be live. |
+| **Provider-level prompt cache** (Cycle R) | `cache_control: { type: "ephemeral" }` on the Claude system message in `streamChat`. Sent through OpenRouter to Anthropic's KV cache. Applies only to the primary model path — fallback (gpt-4o-mini) doesn't support this header and would ignore it. |
+| **User-scoped cache invalidation** (Cycle R) | A secondary `Map<userId, Set<cacheKey>>` index tracks owned keys. `invalidateUserCache()` called fire-and-forget on every attempt so recommendation results can't go stale after a mastery update. |
+| **Chat sessions with AI-generated titles** (Cycle R) | Session is created before the first send, not on demand mid-stream. Title generation runs concurrently with the stream using gpt-4o-mini (max_tokens 15). Title delivered as an SSE frame before `done` so the client receives it in the same stream — no extra round-trip. |
+| **`stopPropagation` on dropdown trigger** (Cycle R) | Closes a race: if the dropdown is open and the trigger is clicked, `mousedown` would fire the outside-click handler (close) before `click` fires the toggle (re-open), causing a flicker. `e.stopPropagation()` on `mousedown` prevents the outside-click handler from seeing the event — one line, no ref needed. |
 
 ---
 
@@ -579,6 +641,7 @@ These are the choices that shape the rest of the codebase. Read them before prop
 | 3 | Pattern tracking surface, readiness score, PostHog analytics | ✅ Complete (Cycles C + E + F) |
 | 3.5 | App shell + nav, Problems page + attempt UI, Chat page, auth smoke test | ✅ Complete (Cycles G + H + I + J) |
 | 4 | UX polish (skeletons, cross-page links, titles), public homepage, AI call monitor, bug fixes | ✅ Complete (Cycles K + L + M + Q) |
+| 4.5 | Response caching (Redis-ready, user-scoped invalidation, monitor visibility), provider-level prompt caching, chat UI redesign (modern input, code copy), chat sessions with persistent history and AI-generated titles | ✅ Complete (Cycle R) |
 | 5 | Testing infrastructure (unit, integration, prompt regression) | Planned (Cycles N + O) |
 | 6 | Deployment (Docker, CI/CD, production config) | Planned (Cycle P) |
 | 7 | Mock interview mode, voice interviews, exportable reports | Out of scope (for now) |

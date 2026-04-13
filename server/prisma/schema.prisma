@@ -24,7 +24,9 @@ model User {
   topics          TopicProgress[]
   weakAreas       WeakArea[]
   chatMessages    ChatMessage[]
-  chatSessions    ChatSession[]
+  chatSessions             ChatSession[]
+  systemDesignAttempts     SystemDesignAttempt[]
+  systemDesignProgress     SystemDesignProgress[]
 }
 
 // User preferences and settings
@@ -173,10 +175,11 @@ model AttemptSubmission {
 // Detected weak areas
 model WeakArea {
   id          String   @id @default(cuid())
-  userId      String
-  topicId     String?
-  patternId   String?
-  reason      String   // slow | confused | failing
+  userId               String
+  topicId              String?
+  patternId            String?
+  systemDesignTopicId  String?
+  reason               String   // slow | confused | failing
   severity    Int      @default(1)  // 1-3
   detectedAt  DateTime @default(now())
   resolvedAt  DateTime?
@@ -189,6 +192,7 @@ model WeakArea {
   @@index([userId])
   @@index([topicId])
   @@index([patternId])
+  @@index([systemDesignTopicId])
   @@index([detectedAt])
 }
 
@@ -223,4 +227,95 @@ model ChatMessage {
   @@index([sessionId])
   @@index([sessionId, createdAt])
   @@index([createdAt])
+}
+
+// ─── System Design ────────────────────────────────────────────────────────────
+
+model SystemDesignTopic {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  category        String
+  description     String   @db.Text
+  difficulty      String   // beginner | intermediate | advanced
+  prerequisiteIds String[] @default([])
+  createdAt       DateTime @default(now())
+
+  questions SystemDesignQuestionTopic[]
+  progress  SystemDesignProgress[]
+}
+
+model SystemDesignQuestion {
+  id               String   @id @default(cuid())
+  prompt           String   @db.Text
+  difficulty       String   // easy | medium | hard
+  expectedConcepts String[]
+  resources        Json     @default("[]")  // [{title, url, type}]
+  createdAt        DateTime @default(now())
+
+  topics   SystemDesignQuestionTopic[]
+  attempts SystemDesignAttempt[]
+}
+
+// Explicit join table — needed for "questions by topic" filter queries
+model SystemDesignQuestionTopic {
+  questionId String
+  topicId    String
+
+  question SystemDesignQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  topic    SystemDesignTopic    @relation(fields: [topicId],    references: [id], onDelete: Cascade)
+
+  @@id([questionId, topicId])
+  @@index([topicId])
+}
+
+model SystemDesignAttempt {
+  id           String   @id @default(cuid())
+  userId       String
+  questionId   String
+  responseText String   @db.Text
+  createdAt    DateTime @default(now())
+
+  user     User                       @relation(fields: [userId],     references: [id], onDelete: Cascade)
+  question SystemDesignQuestion       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  result   SystemDesignAttemptResult?
+
+  @@index([userId])
+  @@index([questionId])
+  @@index([userId, createdAt])
+}
+
+model SystemDesignAttemptResult {
+  id                        String   @id @default(cuid())
+  attemptId                 String   @unique
+  score                     Int      // 0-100
+  requirementsClarification Int      // 0-25
+  componentCoverage         Int      // 0-25
+  scalabilityReasoning      Int      // 0-25
+  tradeoffAwareness         Int      // 0-25
+  feedback                  String   @db.Text
+  missingConcepts           String[]
+  suggestedDeepDive         String?
+  createdAt                 DateTime @default(now())
+
+  attempt SystemDesignAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+}
+
+model SystemDesignProgress {
+  id           String   @id @default(cuid())
+  userId       String
+  topicId      String
+  masteryScore Int      @default(0)
+  attemptCount Int      @default(0)
+  lastReviewed DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user  User              @relation(fields: [userId],  references: [id], onDelete: Cascade)
+  topic SystemDesignTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@index([userId])
+  @@index([topicId])
 }

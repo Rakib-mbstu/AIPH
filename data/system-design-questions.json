@@ -1,0 +1,248 @@
+[
+  {
+    "prompt": "Design a URL Shortener (like bit.ly)",
+    "difficulty": "easy",
+    "expectedConcepts": [
+      "Unique ID generation (base62 encoding or hash)",
+      "Key-value store for redirect lookups",
+      "Caching hot URLs to reduce DB load",
+      "Redirect via 301 (permanent) vs 302 (temporary)",
+      "Handling collisions in ID generation",
+      "Analytics tracking (click counts, geolocation)",
+      "Rate limiting to prevent abuse"
+    ],
+    "topicNames": [
+      "Caching",
+      "Database Sharding",
+      "API Design",
+      "Rate Limiting"
+    ],
+    "resources": [
+      { "title": "System Design Primer — URL Shortener", "url": "https://github.com/donnemartin/system-design-primer/blob/master/solutions/system_design/pastebin/README.md", "type": "article" },
+      { "title": "ByteByteGo — Design a URL Shortener", "url": "https://bytebytego.com/courses/system-design-interview/design-a-url-shortener", "type": "article" },
+      { "title": "High Scalability — How bit.ly works", "url": "http://highscalability.com/blog/2014/7/14/bitly-lessons-learned-building-a-distributed-system-that-ha.html", "type": "article" }
+    ]
+  },
+  {
+    "prompt": "Design Twitter's Home Timeline",
+    "difficulty": "medium",
+    "expectedConcepts": [
+      "Fan-out on write vs fan-out on read trade-offs",
+      "Timeline cache per user (Redis sorted set)",
+      "Handling celebrity users (hybrid fan-out)",
+      "Tweet storage and media separation",
+      "Message queue for async fan-out",
+      "CDN for media delivery",
+      "Sharding tweets by user ID"
+    ],
+    "topicNames": [
+      "Caching",
+      "Message Queues",
+      "Database Sharding",
+      "CDNs",
+      "Distributed Caching"
+    ],
+    "resources": [
+      { "title": "Twitter Engineering — Timeline at Scale", "url": "https://www.infoq.com/presentations/Twitter-Timeline-Scalability/", "type": "article" },
+      { "title": "ByteByteGo — Design Twitter", "url": "https://bytebytego.com/courses/system-design-interview/design-a-chat-system", "type": "article" },
+      { "title": "High Scalability — Twitter architecture", "url": "http://highscalability.com/scaling-twitter-making-twitter-10000-percent-faster", "type": "article" }
+    ]
+  },
+  {
+    "prompt": "Design a Video Streaming Service (like Netflix)",
+    "difficulty": "hard",
+    "expectedConcepts": [
+      "Video upload pipeline and transcoding (multiple resolutions)",
+      "CDN for video delivery close to users",
+      "Adaptive bitrate streaming (HLS/DASH)",
+      "Metadata storage vs blob storage separation",
+      "Content recommendation engine",
+      "Load balancing across regions",
+      "Database replication for availability",
+      "View count tracking at scale"
+    ],
+    "topicNames": [
+      "CDNs",
+      "Load Balancing",
+      "Caching",
+      "Database Replication",
+      "Message Queues"
+    ],
+    "resources": [
+      { "title": "Netflix Tech Blog — Streaming at Scale", "url": "https://netflixtechblog.com/tagged/streaming", "type": "article" },
+      { "title": "ByteByteGo — Design YouTube", "url": "https://bytebytego.com/courses/system-design-interview/design-youtube", "type": "article" },
+      { "title": "High Scalability — Netflix architecture", "url": "http://highscalability.com/blog/2021/12/13/how-does-netflix-work.html", "type": "article" }
+    ]
+  },
+  {
+    "prompt": "Design a Chat Application (like WhatsApp)",
+    "difficulty": "medium",
+    "expectedConcepts": [
+      "WebSocket connections for real-time messaging",
+      "Message storage and ordering guarantees",
+      "Online presence and last-seen tracking",
+      "Message delivery receipts (sent / delivered / read)",
+      "Group chat fan-out",
+      "Handling offline users (push notifications or message queue)",
+      "End-to-end encryption considerations",
+      "Sharding conversations by chat ID"
+    ],
+    "topicNames": [
+      "Message Queues",
+      "Database Sharding",
+      "Caching",
+      "Service Discovery"
+    ],
+    "resources": [
+      { "title": "ByteByteGo — Design a Chat System", "url": "https://bytebytego.com/courses/system-design-interview/design-a-chat-system", "type": "article" },
+      { "title": "Slack Engineering — Scaling the Real-time Messaging", "url": "https://slack.engineering/scaling-slacks-job-queue/", "type": "article" },
+      { "title": "WhatsApp Engineering at Scale", "url": "https://www.youtube.com/watch?v=vAiye3isXyk", "type": "video" }
+    ]
+  },
+  {
+    "prompt": "Design Uber's Ride Matching System",
+    "difficulty": "hard",
+    "expectedConcepts": [
+      "Geospatial indexing (Quadtree or S2 geometry)",
+      "Real-time driver location updates",
+      "Matching algorithm (proximity + availability)",
+      "Surge pricing computation",
+      "Trip state machine",
+      "Message queue for async ride events",
+      "Service discovery for microservices",
+      "Consistent hashing for driver location shards"
+    ],
+    "topicNames": [
+      "Load Balancing",
+      "Service Discovery",
+      "Message Queues",
+      "Consistent Hashing",
+      "Distributed Caching"
+    ],
+    "resources": [
+      { "title": "Uber Engineering — How Uber scales its Real-Time Market Platform", "url": "https://www.infoq.com/presentations/uber-market-platform/", "type": "article" },
+      { "title": "Uber Engineering Blog", "url": "https://www.uber.com/en-US/blog/engineering/", "type": "article" },
+      { "title": "ByteByteGo — Proximity Service / Ride Sharing", "url": "https://bytebytego.com/courses/system-design-interview/proximity-service", "type": "article" }
+    ]
+  },
+  {
+    "prompt": "Design a Distributed Rate Limiter",
+    "difficulty": "easy",
+    "expectedConcepts": [
+      "Token bucket vs sliding window algorithm",
+      "Storing counters in Redis with TTL",
+      "Atomic increment with INCR + EXPIRE",
+      "Distributed consistency: local vs centralised limiter",
+      "Race conditions and Lua scripts for atomicity",
+      "Returning 429 with Retry-After header",
+      "Per-user, per-IP, and per-endpoint limits"
+    ],
+    "topicNames": [
+      "Rate Limiting",
+      "Distributed Caching",
+      "API Design"
+    ],
+    "resources": [
+      { "title": "ByteByteGo — Design a Rate Limiter", "url": "https://bytebytego.com/courses/system-design-interview/design-a-rate-limiter", "type": "article" },
+      { "title": "Cloudflare — How we built rate limiting", "url": "https://blog.cloudflare.com/counting-things-a-lot-of-different-things/", "type": "article" },
+      { "title": "Stripe — Rate Limiters", "url": "https://stripe.com/blog/rate-limiters", "type": "article" }
+    ]
+  },
+  {
+    "prompt": "Design a Search Autocomplete System",
+    "difficulty": "medium",
+    "expectedConcepts": [
+      "Trie data structure for prefix matching",
+      "Storing top-K suggestions per prefix",
+      "Offline aggregation of search frequency",
+      "Caching popular prefixes at the edge",
+      "Debouncing client-side requests",
+      "Sharding the trie by prefix range",
+      "Handling personalisation vs global suggestions"
+    ],
+    "topicNames": [
+      "Caching",
+      "Database Sharding",
+      "CDNs",
+      "Distributed Caching"
+    ],
+    "resources": [
+      { "title": "ByteByteGo — Design Typeahead Suggestion", "url": "https://bytebytego.com/courses/system-design-interview/design-typeahead-suggestion", "type": "article" },
+      { "title": "Algolia — How Search Autocomplete Works", "url": "https://www.algolia.com/blog/engineering/inside-the-algolia-engine-part-1-indexing-vs-search/", "type": "article" },
+      { "title": "System Design Primer — Search Autocomplete", "url": "https://github.com/donnemartin/system-design-primer", "type": "article" }
+    ]
+  },
+  {
+    "prompt": "Design Pastebin",
+    "difficulty": "easy",
+    "expectedConcepts": [
+      "Unique paste ID generation (base62)",
+      "Blob storage for paste content (S3-like)",
+      "Metadata in relational DB (expiry, owner, views)",
+      "Caching hot pastes",
+      "Expiry and cleanup of old pastes",
+      "Read-heavy workload — optimise for reads",
+      "Optional: syntax highlighting, private pastes"
+    ],
+    "topicNames": [
+      "Caching",
+      "SQL vs NoSQL",
+      "API Design"
+    ],
+    "resources": [
+      { "title": "System Design Primer — Pastebin", "url": "https://github.com/donnemartin/system-design-primer/blob/master/solutions/system_design/pastebin/README.md", "type": "article" },
+      { "title": "ByteByteGo — Design a Key-Value Store", "url": "https://bytebytego.com/courses/system-design-interview/design-a-key-value-store", "type": "article" }
+    ]
+  },
+  {
+    "prompt": "Design a Notification System",
+    "difficulty": "medium",
+    "expectedConcepts": [
+      "Multiple delivery channels: push, email, SMS",
+      "Message queue to decouple trigger from delivery",
+      "Fan-out for bulk notifications",
+      "User notification preferences and opt-outs",
+      "Retry logic with exponential backoff",
+      "Deduplication to prevent duplicate sends",
+      "Tracking delivery and open rates",
+      "Prioritisation of critical vs non-critical notifications"
+    ],
+    "topicNames": [
+      "Message Queues",
+      "Event-Driven Architecture",
+      "Service Discovery",
+      "Distributed Caching"
+    ],
+    "resources": [
+      { "title": "ByteByteGo — Design a Notification System", "url": "https://bytebytego.com/courses/system-design-interview/design-a-notification-system", "type": "article" },
+      { "title": "Airbnb Engineering — Building a Scalable Push Notification System", "url": "https://medium.com/airbnb-engineering/building-an-intelligent-automation-platform-for-notification-delivery-ee4a08e93a1e", "type": "article" }
+    ]
+  },
+  {
+    "prompt": "Design Google Drive / Cloud File Storage",
+    "difficulty": "hard",
+    "expectedConcepts": [
+      "Chunked file upload and resumable uploads",
+      "Deduplication via content hashing (block-level)",
+      "Blob storage for file data, metadata DB for file tree",
+      "Versioning and delta sync",
+      "CDN for fast file downloads",
+      "Conflict resolution for concurrent edits",
+      "Sharding metadata by user ID",
+      "Consistent hashing across storage nodes",
+      "Access control and sharing permissions"
+    ],
+    "topicNames": [
+      "CDNs",
+      "Database Sharding",
+      "Consistent Hashing",
+      "Database Replication",
+      "Caching"
+    ],
+    "resources": [
+      { "title": "ByteByteGo — Design Google Drive", "url": "https://bytebytego.com/courses/system-design-interview/design-google-drive", "type": "article" },
+      { "title": "Dropbox Engineering — How we sync files", "url": "https://dropbox.tech/infrastructure/how-we-scaled-dropbox", "type": "article" },
+      { "title": "Designing Data-Intensive Applications (DDIA) — Ch.3 Storage", "url": "https://dataintensive.net/", "type": "article" }
+    ]
+  }
+]

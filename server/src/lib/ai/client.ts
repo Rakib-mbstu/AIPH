@@ -42,6 +42,10 @@ const MODELS = {
     primary: 'openai/gpt-4o-mini',
     fallback: 'openai/gpt-4o-mini',
   },
+  systemDesignEvaluation: {
+    primary: 'openai/gpt-4o-mini',
+    fallback: 'openai/gpt-4o-mini',
+  },
 } as const
 
 /**
@@ -50,9 +54,10 @@ const MODELS = {
  * `chat` is excluded — it streams and is never called via completeJson.
  */
 const CACHE_TTL_MS: Partial<Record<keyof typeof MODELS, number>> = {
-  evaluation:     7 * 24 * 60 * 60 * 1000,  // 7 days  — same code/approach → same score
-  roadmap:        24 * 60 * 60 * 1000,       // 24 hours — mastery changes slowly
-  recommendation: 2 * 60 * 60 * 1000,        // 2 hours  — shifts within a session
+  evaluation:               7 * 24 * 60 * 60 * 1000,  // 7 days  — same code/approach → same score
+  roadmap:                  24 * 60 * 60 * 1000,       // 24 hours — mastery changes slowly
+  recommendation:           2 * 60 * 60 * 1000,        // 2 hours  — shifts within a session
+  systemDesignEvaluation:   7 * 24 * 60 * 60 * 1000,  // 7 days  — same response text → same score
 }
 
 // =============================================================================
@@ -65,6 +70,8 @@ export interface ChatContext {
   solvedProblems?: string[]
   masteryScores?: Record<string, number>
   recentPatterns?: string[]
+  systemDesignWeakAreas?: string[]
+  recentSystemDesignAttempts?: string[]
 }
 
 export interface EvaluationInput {
@@ -140,6 +147,23 @@ export interface RoadmapResult {
     week2?: string[]
     dailyProblemTarget: number
   }
+}
+
+export interface SystemDesignEvaluationInput {
+  prompt: string
+  expectedConcepts: string[]
+  responseText: string
+}
+
+export interface SystemDesignEvaluationResult {
+  score: number
+  requirementsClarification: number
+  componentCoverage: number
+  scalabilityReasoning: number
+  tradeoffAwareness: number
+  feedback: string
+  missingConcepts: string[]
+  suggestedDeepDive: string | null
 }
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
@@ -304,6 +328,8 @@ export async function* streamChat(
     weakAreas: context.weakAreas?.join(', '),
     recentPatterns: context.recentPatterns?.join(', '),
     masteryScores: JSON.stringify(context.masteryScores || {}),
+    systemDesignWeakAreas: context.systemDesignWeakAreas?.join(', '),
+    recentSystemDesignAttempts: context.recentSystemDesignAttempts?.join(', '),
   })
 
   const { primary, fallback } = MODELS.chat
@@ -521,5 +547,39 @@ export async function recommendProblems(
     'Pick the best 3-5 problems from the pool and return JSON.',
     1200,
     userId
+  )
+}
+
+// =============================================================================
+// Public: System design evaluation
+// =============================================================================
+
+/**
+ * Evaluate a user's free-text system design response against the question prompt
+ * and expected concepts. Returns a structured score across four rubric dimensions.
+ *
+ * Content-addressed caching (7 days): the same question + response text always
+ * produces the same evaluation, regardless of which user submitted it.
+ * No userId arg needed — no user-scoped cache invalidation required here.
+ */
+export async function evaluateSystemDesign(
+  input: SystemDesignEvaluationInput
+): Promise<SystemDesignEvaluationResult> {
+  const systemPrompt = renderPrompt('system-design-evaluation', {})
+  const userPrompt = `
+Question: ${input.prompt}
+
+Expected Concepts:
+${input.expectedConcepts.map((c) => `- ${c}`).join('\n')}
+
+Candidate Response:
+${input.responseText}
+`.trim()
+
+  return completeJson<SystemDesignEvaluationResult>(
+    'systemDesignEvaluation',
+    systemPrompt,
+    userPrompt,
+    800
   )
 }

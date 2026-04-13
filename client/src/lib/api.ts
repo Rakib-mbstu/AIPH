@@ -187,6 +187,66 @@ export interface AttemptResult {
 
 export type ChatTurn = { role: 'user' | 'assistant'; content: string }
 
+// ── System Design ──────────────────────────────────────────────────────────
+
+export interface SystemDesignTopic {
+  id: string
+  name: string
+  category: string
+  description: string
+  difficulty: string
+  prerequisiteIds: string[]
+}
+
+export interface SystemDesignProgress {
+  id: string
+  masteryScore: number
+  attemptCount: number
+  lastReviewed: string
+}
+
+export interface SystemDesignTopicWithProgress extends SystemDesignTopic {
+  progress: SystemDesignProgress | null
+}
+
+export interface SystemDesignResource {
+  title: string
+  url: string
+  type: string  // 'article' | 'video' | 'docs'
+}
+
+export interface SystemDesignQuestion {
+  id: string
+  prompt: string
+  difficulty: string
+  expectedConcepts: string[]
+  resources: SystemDesignResource[]
+  topics: SystemDesignTopic[]
+  attemptCount: number
+}
+
+export interface SystemDesignAttemptResult {
+  id: string
+  score: number
+  requirementsClarification: number
+  componentCoverage: number
+  scalabilityReasoning: number
+  tradeoffAwareness: number
+  feedback: string
+  missingConcepts: string[]
+  suggestedDeepDive: string | null
+}
+
+export interface SystemDesignAttemptPayload {
+  questionId: string
+  responseText: string
+}
+
+export interface SystemDesignAttemptResponse {
+  attempt: { id: string; createdAt: string }
+  result: SystemDesignAttemptResult
+}
+
 export interface AiCallRecord {
   id: number
   ts: string
@@ -383,6 +443,20 @@ export const api = {
   // Readiness
   getReadiness: (token: string) =>
     apiCall<ReadinessResult>('/readiness', { token }),
+
+  // System Design
+  getSystemDesignQuestions: (token: string) =>
+    apiCall<{ questions: SystemDesignQuestion[] }>('/system-design/questions', { token }),
+  getSystemDesignTopics: (token: string) =>
+    apiCall<{ topics: SystemDesignTopicWithProgress[] }>('/system-design/topics', { token }),
+  submitSystemDesignAttempt: (token: string, payload: SystemDesignAttemptPayload) =>
+    apiCall<SystemDesignAttemptResponse>('/system-design/attempts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      token,
+    }),
+  getSystemDesignAttemptHistory: (token: string, questionId: string) =>
+    apiCall<{ attempts: any[] }>(`/system-design/attempts/${questionId}`, { token }),
 
   // Admin — AI call monitor (no Clerk token needed; uses ADMIN_KEY header)
   getAiLogs: (limit = 100, adminKey?: string) =>

@@ -29,6 +29,25 @@ interface ProblemSeed {
   source?: string
   description?: string
 }
+interface SystemDesignTopicSeed {
+  name: string
+  category: string
+  description: string
+  difficulty: string
+  prerequisiteNames: string[]
+}
+interface SystemDesignResource {
+  title: string
+  url: string
+  type: string
+}
+interface SystemDesignQuestionSeed {
+  prompt: string
+  difficulty: string
+  expectedConcepts: string[]
+  topicNames: string[]
+  resources: SystemDesignResource[]
+}
 
 function loadJson<T>(relPath: string): T {
   // Seed runs from server/, data/ lives at repo root
@@ -111,6 +130,72 @@ async function main() {
     inserted++
   }
   console.log(`  ✓ ${inserted} problems${skipped ? ` (${skipped} skipped)` : ''}`)
+
+  // --- System Design Topics ---
+  const sdTopics = loadJson<SystemDesignTopicSeed[]>('system-design-topics.json')
+
+  for (const t of sdTopics) {
+    await prisma.systemDesignTopic.upsert({
+      where: { name: t.name },
+      update: { category: t.category, description: t.description, difficulty: t.difficulty },
+      create: { name: t.name, category: t.category, description: t.description, difficulty: t.difficulty },
+    })
+  }
+
+  // Second pass: resolve prerequisiteNames → IDs and write prerequisiteIds
+  const allSdTopics = await prisma.systemDesignTopic.findMany()
+  const sdTopicId = new Map(allSdTopics.map((t) => [t.name, t.id]))
+
+  for (const t of sdTopics) {
+    const prereqIds = t.prerequisiteNames
+      .map((name) => sdTopicId.get(name))
+      .filter((id): id is string => id !== undefined)
+    await prisma.systemDesignTopic.update({
+      where: { name: t.name },
+      data: { prerequisiteIds: prereqIds },
+    })
+  }
+  console.log(`  ✓ ${sdTopics.length} system design topics`)
+
+  // --- System Design Questions ---
+  const sdQuestions = loadJson<SystemDesignQuestionSeed[]>('system-design-questions.json')
+
+  for (const q of sdQuestions) {
+    // Resolve topic names to IDs — skip unknown topics with a warning
+    const resolvedTopicIds: string[] = []
+    for (const name of q.topicNames) {
+      const id = sdTopicId.get(name)
+      if (!id) {
+        console.warn(`  ⚠ question "${q.prompt.slice(0, 40)}…" — unknown topic "${name}"`)
+      } else {
+        resolvedTopicIds.push(id)
+      }
+    }
+
+    // Upsert question on prompt
+    const existing = await prisma.systemDesignQuestion.findFirst({ where: { prompt: q.prompt } })
+    let questionId: string
+    if (existing) {
+      await prisma.systemDesignQuestion.update({
+        where: { id: existing.id },
+        data: { difficulty: q.difficulty, expectedConcepts: q.expectedConcepts, resources: q.resources },
+      })
+      questionId = existing.id
+    } else {
+      const created = await prisma.systemDesignQuestion.create({
+        data: { prompt: q.prompt, difficulty: q.difficulty, expectedConcepts: q.expectedConcepts, resources: q.resources },
+      })
+      questionId = created.id
+    }
+
+    // Idempotent join rows — delete then recreate
+    await prisma.systemDesignQuestionTopic.deleteMany({ where: { questionId } })
+    await prisma.systemDesignQuestionTopic.createMany({
+      data: resolvedTopicIds.map((topicId) => ({ questionId, topicId })),
+    })
+  }
+  console.log(`  ✓ ${sdQuestions.length} system design questions`)
+
   console.log('🌱 Done.')
 }
 

@@ -49,7 +49,7 @@ const WEIGHTS = {
 } as const
 
 export async function computeReadiness(userId: string): Promise<ReadinessResult> {
-  const [topics, topicProgress, attempts] = await Promise.all([
+  const [topics, topicProgress, attempts, sdProgress, sdTotalQuestions] = await Promise.all([
     prisma.topic.findMany({ select: { id: true } }),
     prisma.topicProgress.findMany({ where: { userId } }),
     prisma.attempt.findMany({
@@ -62,6 +62,8 @@ export async function computeReadiness(userId: string): Promise<ReadinessResult>
       orderBy: { createdAt: 'desc' },
       take: 500,
     }),
+    prisma.systemDesignProgress.findMany({ where: { userId } }),
+    prisma.systemDesignQuestion.count(),
   ])
 
   const dsaCoverage = computeDsaCoverage(topics.length, topicProgress)
@@ -72,14 +74,9 @@ export async function computeReadiness(userId: string): Promise<ReadinessResult>
     score: 0,
     weight: WEIGHTS.mockPerformance,
     unscored: true,
-    detail: 'Mock interview mode lands in Phase 4',
+    detail: 'Mock interview mode lands in a future phase',
   }
-  const systemDesign: ReadinessComponent = {
-    score: 0,
-    weight: WEIGHTS.systemDesign,
-    unscored: true,
-    detail: 'System design tracking lands in Phase 4',
-  }
+  const systemDesign = computeSystemDesign(sdProgress, sdTotalQuestions)
 
   const overall = Math.round(
     dsaCoverage.score * dsaCoverage.weight +
@@ -164,6 +161,39 @@ function computeDifficultyHandled(
     score,
     weight: WEIGHTS.difficultyHandled,
     detail: `${easy} easy · ${medium} medium · ${hard} hard solved`,
+  }
+}
+
+/**
+ * System Design = blend of topic mastery depth and question breadth.
+ *
+ *   score = mean(masteryScore) * 0.6 + min(attempted / total, 1) * 100 * 0.4
+ *
+ * Untouched topics count as 0 (same honest-scoring principle as DSA coverage).
+ * `attempted` = number of topics with at least one attempt logged.
+ */
+function computeSystemDesign(
+  sdProgress: Array<{ masteryScore: number; attemptCount: number }>,
+  totalQuestions: number
+): ReadinessComponent {
+  if (totalQuestions === 0) {
+    return { score: 0, weight: WEIGHTS.systemDesign, detail: 'No questions seeded' }
+  }
+
+  const attempted = sdProgress.filter((p) => p.attemptCount > 0).length
+  const meanMastery =
+    sdProgress.length > 0
+      ? sdProgress.reduce((s, p) => s + p.masteryScore, 0) / sdProgress.length
+      : 0
+
+  const score = Math.round(
+    meanMastery * 0.6 + Math.min(attempted / totalQuestions, 1) * 100 * 0.4
+  )
+
+  return {
+    score,
+    weight: WEIGHTS.systemDesign,
+    detail: `${attempted}/${totalQuestions} questions attempted`,
   }
 }
 

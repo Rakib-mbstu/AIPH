@@ -1,0 +1,107 @@
+[
+  {
+    "name": "Load Balancing",
+    "category": "Infrastructure",
+    "description": "Load balancing distributes incoming traffic across multiple servers to ensure no single server bears too much demand. Key algorithms include round-robin, least connections, IP hash, and weighted distribution. Hardware load balancers (F5) vs software (Nginx, HAProxy). Layer 4 (TCP) vs Layer 7 (HTTP) load balancing. Health checks and automatic failover. Sticky sessions and their trade-offs.",
+    "difficulty": "beginner",
+    "prerequisiteNames": []
+  },
+  {
+    "name": "Caching",
+    "category": "Storage",
+    "description": "Caching stores frequently accessed data in fast storage (Redis, Memcached) to reduce latency and database load. Cache-aside, read-through, write-through, and write-behind strategies. Eviction policies: LRU, LFU, FIFO. Cache invalidation — the hardest problem in CS. TTL-based expiry. Cache stampede and how to prevent it (mutex locks, probabilistic early expiration). Hot keys and local vs distributed caches.",
+    "difficulty": "beginner",
+    "prerequisiteNames": []
+  },
+  {
+    "name": "Database Sharding",
+    "category": "Storage",
+    "description": "Sharding horizontally partitions data across multiple database nodes. Shard key selection is critical — bad keys cause hotspots. Range-based, hash-based, and directory-based sharding strategies. Cross-shard queries and joins become expensive. Resharding complexity when a shard grows too large. Celibacy trade-off: sharding gains write scale but loses ACID guarantees across shards.",
+    "difficulty": "intermediate",
+    "prerequisiteNames": ["Caching"]
+  },
+  {
+    "name": "Message Queues",
+    "category": "Async Communication",
+    "description": "Message queues (Kafka, RabbitMQ, SQS) decouple producers from consumers, enabling async processing and buffering traffic spikes. Topics, partitions, and consumer groups in Kafka. At-least-once vs exactly-once delivery semantics. Dead letter queues for failed messages. Backpressure and consumer lag. Fan-out patterns. When to use a queue vs a direct HTTP call.",
+    "difficulty": "intermediate",
+    "prerequisiteNames": []
+  },
+  {
+    "name": "Rate Limiting",
+    "category": "Infrastructure",
+    "description": "Rate limiting controls how many requests a client can make in a given time window. Algorithms: token bucket, leaky bucket, fixed window counter, sliding window log, sliding window counter. Where to enforce: API gateway, reverse proxy, application layer. Distributed rate limiting with Redis. Returning 429 Too Many Requests with Retry-After headers. Distinguishing per-user, per-IP, and per-endpoint limits.",
+    "difficulty": "intermediate",
+    "prerequisiteNames": ["Caching"]
+  },
+  {
+    "name": "Consistent Hashing",
+    "category": "Distributed Systems",
+    "description": "Consistent hashing minimises key remapping when nodes are added or removed from a distributed system. Virtual nodes (vnodes) improve load distribution. Used in distributed caches (Dynamo, Cassandra), CDNs, and load balancers. Without consistent hashing, adding one node invalidates ~all cache keys. With it, only ~K/N keys move. Hotspot mitigation via virtual nodes.",
+    "difficulty": "advanced",
+    "prerequisiteNames": ["Caching", "Database Sharding"]
+  },
+  {
+    "name": "CAP Theorem",
+    "category": "Distributed Systems",
+    "description": "CAP theorem states that a distributed system can guarantee at most two of: Consistency, Availability, Partition Tolerance. Since network partitions are unavoidable, the real choice is CP vs AP. CP systems (HBase, Zookeeper) sacrifice availability during partitions. AP systems (Cassandra, CouchDB) return stale data. PACELC extends CAP with latency trade-offs under normal operation.",
+    "difficulty": "advanced",
+    "prerequisiteNames": []
+  },
+  {
+    "name": "CDNs",
+    "category": "Infrastructure",
+    "description": "Content Delivery Networks cache static and dynamic content at edge locations close to users. Push CDN vs pull CDN. Cache-Control headers and TTLs. CDN invalidation strategies. Using CDNs for media streaming (HLS/DASH), API acceleration, and DDoS protection. Anycast routing. Multi-CDN strategies for redundancy. When CDNs hurt: personalised content, real-time data.",
+    "difficulty": "beginner",
+    "prerequisiteNames": ["Caching"]
+  },
+  {
+    "name": "API Design",
+    "category": "Architecture",
+    "description": "REST vs GraphQL vs gRPC trade-offs. REST: resource-oriented, HTTP verbs, stateless, easy caching. GraphQL: flexible queries, single endpoint, N+1 problem, harder caching. gRPC: binary protocol (Protobuf), streaming, strongly typed, low latency — ideal for internal services. API versioning strategies. Idempotency keys for safe retries. Pagination: cursor-based vs offset. Rate limiting headers.",
+    "difficulty": "beginner",
+    "prerequisiteNames": []
+  },
+  {
+    "name": "SQL vs NoSQL",
+    "category": "Storage",
+    "description": "SQL databases (Postgres, MySQL) offer ACID transactions, rich queries, and strong consistency. NoSQL databases trade some guarantees for scalability and flexibility. Key-value stores (Redis, DynamoDB): fast lookups by key. Document stores (MongoDB): flexible schemas. Column-family stores (Cassandra): optimised for wide-row time-series. Graph databases (Neo4j): relationship-heavy data. Know when each fits.",
+    "difficulty": "beginner",
+    "prerequisiteNames": []
+  },
+  {
+    "name": "Database Replication",
+    "category": "Storage",
+    "description": "Replication copies data across multiple nodes for read scale and fault tolerance. Leader-follower (primary-replica): all writes go to leader, reads distributed across replicas. Multi-leader: multiple write nodes, conflict resolution required. Leaderless (Dynamo-style): quorum reads/writes (R + W > N). Replication lag and read-your-writes consistency. Failover and leader election.",
+    "difficulty": "intermediate",
+    "prerequisiteNames": ["SQL vs NoSQL"]
+  },
+  {
+    "name": "Service Discovery",
+    "category": "Microservices",
+    "description": "Service discovery lets services find each other dynamically without hardcoded IPs. Client-side discovery: client queries a registry (Eureka, Consul) and picks an instance. Server-side discovery: load balancer queries the registry. Health checks ensure only healthy instances are registered. DNS-based discovery. Service mesh (Istio, Linkerd) handles discovery, load balancing, and mTLS transparently.",
+    "difficulty": "advanced",
+    "prerequisiteNames": ["Load Balancing"]
+  },
+  {
+    "name": "Distributed Caching",
+    "category": "Storage",
+    "description": "Distributed caches (Redis Cluster, Memcached with consistent hashing) spread cache data across multiple nodes. Consistent hashing for key distribution. Replication within the cache tier for high availability. Cache-aside pattern at scale. Thundering herd prevention. Cache warming strategies. Local cache (L1) + distributed cache (L2) layering. Monitoring hit rate, eviction rate, and memory pressure.",
+    "difficulty": "intermediate",
+    "prerequisiteNames": ["Caching", "Consistent Hashing"]
+  },
+  {
+    "name": "Event-Driven Architecture",
+    "category": "Async Communication",
+    "description": "Event-driven systems communicate via events rather than direct calls, enabling loose coupling and independent scaling. Event sourcing: store state as a sequence of events rather than current state. CQRS: separate read and write models. Saga pattern for distributed transactions — choreography vs orchestration. Outbox pattern for reliable event publishing. Schema evolution and backward compatibility.",
+    "difficulty": "advanced",
+    "prerequisiteNames": ["Message Queues"]
+  },
+  {
+    "name": "Microservices vs Monolith",
+    "category": "Architecture",
+    "description": "Monoliths are simpler to develop, test, and deploy but become hard to scale and change as they grow. Microservices offer independent deployability, technology flexibility, and fault isolation but add distributed system complexity (network calls, data consistency, observability). Strangler fig pattern for incremental migration. Domain-driven design for service boundaries. When to start with a monolith and when to split.",
+    "difficulty": "intermediate",
+    "prerequisiteNames": ["API Design", "Service Discovery"]
+  }
+]
